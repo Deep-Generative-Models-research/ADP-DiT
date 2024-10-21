@@ -2,7 +2,6 @@ from pathlib import Path
 
 from loguru import logger
 
-from mllm.dialoggen_demo import DialogGen
 from brdit.config import get_args
 from brdit.inference import End2End
 
@@ -16,29 +15,11 @@ def inferencer():
     # Load models
     gen = End2End(args, models_root_path)
 
-    # Try to enhance prompt
-    if args.enhance:
-        logger.info("Loading DialogGen model (for prompt enhancement)...")
-        enhancer = DialogGen(str(models_root_path / "dialoggen"), args.load_4bit)
-        logger.info("DialogGen model loaded.")
-    else:
-        enhancer = None
-
-    return args, gen, enhancer
+    return args, gen
 
 
 if __name__ == "__main__":
-    args, gen, enhancer = inferencer()
-
-    if enhancer:
-        logger.info("Prompt Enhancement...")
-        success, enhanced_prompt = enhancer(args.prompt)
-        if not success:
-            logger.info("Sorry, the prompt is not compliant, refuse to draw.")
-            exit()
-        logger.info(f"Enhanced prompt: {enhanced_prompt}")
-    else:
-        enhanced_prompt = None
+    args, gen = inferencer()
 
     # Run inference
     logger.info("Generating images...")
@@ -47,7 +28,7 @@ if __name__ == "__main__":
                           height=height,
                           width=width,
                           seed=args.seed,
-                          enhanced_prompt=enhanced_prompt,
+                          enhanced_prompt=None,  # Removed T5 enhancement step
                           negative_prompt=args.negative,
                           infer_steps=args.infer_steps,
                           guidance_scale=args.cfg_scale,

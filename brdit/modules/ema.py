@@ -38,8 +38,7 @@ class EMA(object):
             ema_dtype = 'fp16' if args.use_fp16 else 'fp32'
         else:
             ema_dtype = args.ema_dtype
-        
-        # 由于module.half()和module.float()会发生inplace类型修改，因此需要先copy后修改类型
+
         self.ema_model = deepcopy(model)
         if ema_dtype == 'fp16':
             self.ema_model = self.ema_model.half().to(device)

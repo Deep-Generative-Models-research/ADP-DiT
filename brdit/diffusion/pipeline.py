@@ -128,6 +128,35 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
         self.register_to_config(requires_safety_checker=requires_safety_checker)
+    def check_inputs(self, prompt, height, width, callback_steps, negative_prompt, prompt_embeds, negative_prompt_embeds):
+        # Check prompt type
+        if prompt is not None and not isinstance(prompt, (str, list)):
+            raise ValueError(f"Prompt must be a string or list, but got {type(prompt)}")
+
+        # Check height and width
+        if not isinstance(height, int) or not isinstance(width, int):
+            raise ValueError(f"Height and width must be integers, but got height={type(height)}, width={type(width)}")
+
+        # Check callback_steps
+        if callback_steps is not None and callback_steps <= 0:
+            raise ValueError(f"callback_steps must be a positive integer, but got {callback_steps}")
+
+        # Optionally, add more checks as needed
+    def prepare_extra_step_kwargs(self, generator, eta):
+        # This function prepares additional step kwargs for the diffusion scheduler.
+        # eta is only used with the 'ddim' scheduler, so we include it conditionally.
+        extra_step_kwargs = {}
+
+        # Check if the scheduler accepts generator
+        accepts_generator = "generator" in set(inspect.signature(self.scheduler.step).parameters.keys())
+        if accepts_generator:
+            extra_step_kwargs["generator"] = generator
+
+        # Add eta if using DDIM scheduler, to control the amount of noise injected.
+        if "eta" in set(inspect.signature(self.scheduler.step).parameters.keys()):
+            extra_step_kwargs["eta"] = eta
+
+        return extra_step_kwargs
 
     def enable_vae_slicing(self):
         self.vae.enable_slicing()

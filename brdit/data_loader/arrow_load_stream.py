@@ -23,7 +23,7 @@ class TextImageArrowStream(Dataset):
                  args,
                  resolution=512,
                  random_flip=None,
-                 enable_CN=True,
+                 enable_CN=False,
                  log_fn=print,
                  index_file=None,
                  multireso=False,

@@ -203,7 +203,7 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
         self.patch_size = patch_size
         self.num_heads = num_heads
         self.hidden_size = hidden_size
-        self.text_states_dim = args.text_states_dim
+        self.text_states_dim = args.text_states_dim  # CLIP text embedding dimension
         self.norm = args.norm
 
         use_flash_attn = args.infer_mode == 'fa' or args.use_flash_attn
@@ -211,12 +211,29 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
             log_fn(f"    Enable Flash Attention.")
         qk_norm = args.qk_norm  # See http://arxiv.org/abs/2302.05442 for details.
 
-        # Remove T5 embedding related layers and replace with general embeddings or other text embedding models.
+        # Attention pooling
+        pooler_out_dim = 1024
+        # self.pooler = AttentionPool(self.text_len, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
+        self.pooler = AttentionPool(77, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
+
+
+        # Dimension of the extra input vectors
+        self.extra_in_dim = pooler_out_dim
+
+        if args.size_cond:
+            # Image size and crop size conditions
+            self.extra_in_dim += 6 * 256
+
+        if args.use_style_cond:
+            # Here we use a default learned embedder layer for future extension.
+            self.style_embedder = nn.Embedding(1, hidden_size)
+            self.extra_in_dim += hidden_size
+
         # Text embedding for `add`
         self.x_embedder = PatchEmbed(input_size, patch_size, in_channels, hidden_size)
         self.t_embedder = TimestepEmbedder(hidden_size)
         self.extra_embedder = nn.Sequential(
-            nn.Linear(self.text_states_dim, hidden_size * 4),
+            nn.Linear(self.extra_in_dim, hidden_size * 4),
             FP32_SiLU(),
             nn.Linear(hidden_size * 4, hidden_size, bias=True),
         )
@@ -225,7 +242,7 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
         num_patches = self.x_embedder.num_patches
         log_fn(f"    Number of tokens: {num_patches}")
 
-        # HUnYuanDiT Blocks
+        # Brain Tumor Blocks
         self.blocks = nn.ModuleList([
             HunYuanDiTBlock(hidden_size=hidden_size,
                             c_emb_size=hidden_size,
@@ -298,11 +315,8 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
         return_dict: bool
             Whether to return a dictionary.
         """
-        text_states = encoder_hidden_states                     # 2,77,1024
-        text_states_mask = text_embedding_mask.bool()           # 2,77
-
-        clip_t5_mask = text_states_mask
-        text_states = torch.where(clip_t5_mask.unsqueeze(2), text_states, self.text_embedding_padding.to(text_states))
+        text_states = encoder_hidden_states  # CLIP text embedding      # 2,77,1024
+        text_states_mask = text_embedding_mask.bool()                   # 2,77
 
         _, _, oh, ow = x.shape
         th, tw = oh // self.patch_size, ow // self.patch_size
@@ -316,11 +330,12 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
 
         # ========================= Concatenate all extra vectors =========================
         # Build text tokens with pooling
-        extra_vec = encoder_hidden_states
+        extra_vec = self.pooler(encoder_hidden_states)
 
-        if self.args.size_cond == None:
+        if self.args.size_cond is None:
             image_meta_size = None
         self.check_condition_validation(image_meta_size, style)
+
         # Build image meta size tokens if applicable
         if image_meta_size is not None:
             image_meta_size = timestep_embedding(image_meta_size.view(-1), 256)   # [B * 6, 256]
@@ -355,8 +370,8 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
             raise ValueError("The number of controls is not equal to the number of skip connections.")
 
         # ========================= Final layer =========================
-        x = self.final_layer(x, c)                              # (N, L, patch_size ** 2 * out_channels)
-        x = self.unpatchify(x, th, tw)                          # (N, out_channels, H, W)
+        x = self.final_layer(x, c)  # (N, L, patch_size ** 2 * out_channels)
+        x = self.unpatchify(x, th, tw)  # (N, out_channels, H, W)
 
         if return_dict:
             return {'x': x}
@@ -436,6 +451,8 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
 
         # dispatch to correct device
         for name, module in new_module.named_modules():
+            # if any(prefix in name for prefix in PREFIXES):
+            #     module.to(child.weight.device)
             if "ranknum" in name:
                 module.to(child.weight.device)
 

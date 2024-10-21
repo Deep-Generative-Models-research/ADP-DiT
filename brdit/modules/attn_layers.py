@@ -148,6 +148,7 @@ class FlashSelfMHAModified(nn.Module):
         qkv = self.Wqkv(x)
         qkv = qkv.view(b, s, 3, self.num_heads, self.head_dim)  # [b, s, 3, h, d]
         q, k, v = qkv.unbind(dim=2) # [b, s, h, d]
+        # print(f'q shape: {q.shape}, k shape: {k.shape}, v shape: {v.shape}')
         q = self.q_norm(q).half()   # [b, s, h, d]
         k = self.k_norm(k).half()
 
@@ -216,29 +217,40 @@ class FlashCrossMHAModified(nn.Module):
         freqs_cis_img: torch.Tensor
             (batch, hidden_dim // num_heads), RoPE for image
         """
-        b, s1, _ = x.shape     # [b, s1, D]
-        _, s2, _ = y.shape     # [b, s2, 1024]
+
+        b, s1, _ = x.shape     # [batch, seqlen1, D]
+        # Ensure y has the same batch size as x
+        if y.shape[0] != b:
+            y = y.expand(b, -1, -1)  # Expand y to match the batch size
+        _, s2, _ = y.shape     # [batch, seqlen2, D]
 
         q = self.q_proj(x).view(b, s1, self.num_heads, self.head_dim)       # [b, s1, h, d]
-        kv = self.kv_proj(y).view(b, s2, 2, self.num_heads, self.head_dim)  # [b, s2, 2, h, d]
-        k, v = kv.unbind(dim=2)                 # [b, s2, h, d]
-        q = self.q_norm(q).half()               # [b, s1, h, d]
-        k = self.k_norm(k).half()               # [b, s2, h, d]
+
+        # kv = self.kv_proj(y).view(b, s2, 2, self.num_heads, self.head_dim)  # [b, s2, 2, h, d]
+        kv = self.kv_proj(y)
+        # print(f'kv_proj(y) shape: {kv.shape}')  # Check this shape
+        kv = kv.view(b, s2, 2, self.num_heads, self.head_dim)
+
+        k, v = kv.unbind(dim=2)                 # [batch, seqlen2, h, d]
+
+        # print(f'q shape: {q.shape}, k shape: {k.shape}, v shape: {v.shape}')
+        q = self.q_norm(q).half()               # [batch, seqlen1, h, d]
+        k = self.k_norm(k).half()               # [batch, seqlen2, h, d]
 
         # Apply RoPE if needed
         if freqs_cis_img is not None:
             qq, _ = apply_rotary_emb(q, None, freqs_cis_img)
             assert qq.shape == q.shape, f'qq: {qq.shape}, q: {q.shape}'
-            q = qq                              # [b, s1, h, d]
-        kv = torch.stack([k, v], dim=2)         # [b, s1, 2, h, d]
-        context = self.inner_attn(q, kv)        # [b, s1, h, d]
-        context = context.view(b, s1, -1)       # [b, s1, D]
+            q = qq                              # [batch, seqlen1, h, d]
 
+        kv = torch.stack([k, v], dim=2)         # [batch, seqlen2, 2, h, d]
+        context = self.inner_attn(q, kv)        # [batch, seqlen1, h, d]
+
+        context = context.view(b, s1, -1)       # [batch, seqlen1, D]
         out = self.out_proj(context)
         out = self.proj_drop(out)
 
         out_tuple = (out,)
-
         return out_tuple
 
 
@@ -295,6 +307,7 @@ class CrossAttention(nn.Module):
         q = self.q_proj(x).view(b, s1, self.num_heads, self.head_dim)   # [b, s1, h, d]
         kv = self.kv_proj(y).view(b, s2, 2, self.num_heads, self.head_dim)    # [b, s2, 2, h, d]
         k, v = kv.unbind(dim=2) # [b, s, h, d]
+        # print(f'q shape: {q.shape}, k shape: {k.shape}, v shape: {v.shape}')
         q = self.q_norm(q)
         k = self.k_norm(k)
 

@@ -15,6 +15,7 @@ from diffusers.models import AutoencoderKL
 from peft import LoraConfig, get_peft_model
 from torch.utils.data import DataLoader
 from transformers import BertModel, BertTokenizer, logging as tf_logging
+from torch.utils.tensorboard import SummaryWriter
 
 from IndexKits.index_kits import ResolutionGroup
 from IndexKits.index_kits.sampler import DistributedSamplerWithStartIndex, BlockDistributedSampler
@@ -114,8 +115,8 @@ def save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoi
 
 @torch.no_grad()
 def prepare_model_inputs(args, batch, device, vae, text_encoder, freqs_cis_img):
-    image, text_embedding, text_embedding_mask, _, _, kwargs = batch
-
+    # image, text_embedding, text_embedding_mask, _, _, kwargs = batch
+    image, text_embedding, text_embedding_mask,kwargs = batch
     # clip text embedding
     text_embedding = text_embedding.to(device)
     text_embedding_mask = text_embedding_mask.to(device)
@@ -159,6 +160,7 @@ def prepare_model_inputs(args, batch, device, vae, text_encoder, freqs_cis_img):
 
     return latents, model_kwargs
 
+
 def main(args):
     if args.training_parts == "lora":
         args.use_ema = False
@@ -184,6 +186,10 @@ def main(args):
 
     # Setup an experiment folder
     experiment_dir, checkpoint_dir, logger = create_exp_folder(args, rank)
+
+    # TensorBoard Writer 초기화
+    if rank == 0:
+        writer = SummaryWriter(log_dir=os.path.join(experiment_dir, "tensorboard_logs"))
 
     # Log all the arguments
     logger.info(sys.argv)
@@ -417,14 +423,14 @@ def main(args):
         dataset.shuffle(seed=shuffle_seed, fast=True)
         logger.info(f"    End of random shuffle")
 
-        # Move sampler to start_index
-        if not args.multireso:
-            start_index = start_epoch_step * world_size * batch_size
-            if start_index != sampler.start_index:
-                sampler.start_index = start_index
-                # Reset start_epoch_step to zero, to ensure next epoch will start from the beginning.
-                start_epoch_step = 0
-                logger.info(f"      Iters left this epoch: {len(loader):,}")
+        # # Move sampler to start_index
+        # if not args.multireso:
+        #     start_index = start_epoch_step * world_size * batch_size
+        #     if start_index != sampler.start_index:
+        #         sampler.start_index = start_index
+        #         # Reset start_epoch_step to zero, to ensure next epoch will start from the beginning.
+        #         start_epoch_step = 0
+        #         logger.info(f"      Iters left this epoch: {len(loader):,}")
 
         logger.info(f"    Beginning epoch {epoch}...")
         for batch in loader:
@@ -448,28 +454,41 @@ def main(args):
             running_loss += loss.item()
             log_steps += 1
             train_steps += 1
-            if train_steps % args.log_every == 0:
+
+            if rank == 0 and train_steps % args.log_every == 0:
                 # Measure training speed:
                 torch.cuda.synchronize()
                 end_time = time.time()
                 steps_per_sec = log_steps / (end_time - start_time)
+
                 # Reduce loss history over all processes:
                 avg_loss = torch.tensor(running_loss / log_steps, device=device)
                 dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss.item() / world_size
+
                 # get lr from deepspeed fused optimizer
+                current_lr = opt.param_groups[0]['lr']
+                samples_per_sec = int(steps_per_sec * batch_size * world_size)
+
+                # TensorBoard 기록
+                writer.add_scalar('Loss/train', avg_loss, train_steps)
+                writer.add_scalar('Learning Rate', current_lr, train_steps)
+                writer.add_scalar('Steps/Sec', steps_per_sec, train_steps)
+                writer.add_scalar('Samples/Sec', samples_per_sec, train_steps)
+
                 logger.info(f"(step={train_steps:07d}) " +
                             (f"(update_step={train_steps // args.grad_accu_steps:07d}) " if args.grad_accu_steps > 1 else "") +
                             f"Train Loss: {avg_loss:.4f}, "
-                            f"Lr: {opt.param_groups[0]['lr']:.6g}, "
+                            f"Lr: {current_lr:.6g}, "
                             f"Steps/Sec: {steps_per_sec:.2f}, "
-                            f"Samples/Sec: {int(steps_per_sec * batch_size * world_size):d}")
+                            f"Samples/Sec: {samples_per_sec:d}")
+
                 # Reset monitoring variables:
                 running_loss = 0
                 log_steps = 0
                 start_time = time.time()
 
-            # collect gc:
+            # Garbage collection:
             if args.gc_interval > 0 and (train_steps % args.gc_interval == 0):
                 gc.collect()
 
@@ -485,13 +504,20 @@ def main(args):
             logger.info(f"Breaking epoch loop at epoch={epoch}.")
             break
 
+        if rank == 0:
+            writer.add_scalar('Epoch/train', epoch, train_steps)
+
         # Finish an epoch
         if args.ckpt_every_n_epoch > 0 and epoch % args.ckpt_every_n_epoch == 0:
             save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='epoch')
 
         epoch += 1
 
+    # Save the final model
     save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='final')
+
+    if rank == 0:
+        writer.close()
 
     dist.destroy_process_group()
 

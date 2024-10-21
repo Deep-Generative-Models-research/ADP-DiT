@@ -2,7 +2,6 @@ import math
 import torch
 import torch.nn as nn
 from einops import repeat
-
 from timm.models.layers import to_2tuple
 
 
@@ -78,7 +77,7 @@ def timestep_embedding(t, dim, max_period=10000, repeat_only=False):
             -math.log(max_period)
             * torch.arange(start=0, end=half, dtype=torch.float32)
             / half
-        ).to(device=t.device)   # size: [dim/2], 一个指数衰减的曲线
+        ).to(device=t.device)
         args = t[:, None].float() * freqs[None]
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
         if dim % 2:
