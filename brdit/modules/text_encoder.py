@@ -1,71 +1,58 @@
 import torch
 import torch.nn as nn
+from transformers import CLIPProcessor, CLIPModel
 
-class TinyCLIPEmbedder(nn.Module):
-    available_models = ["tiny-clip"]  # Update the model list with relevant models
+class CLIPTextEmbedder(nn.Module):
+    available_models = ["openai/clip-vit-base-patch32"]  # Specify available model
 
     def __init__(
         self,
-        model_dir="tiny-clip",  # Assuming Tiny CLIP or other lightweight models
-        model_kwargs=None,
-        torch_dtype=None,
-        max_length=128,
+        model_name="openai/clip-vit-base-patch32",
+        device="cuda" if torch.cuda.is_available() else "cpu",
+        max_length=77  # Default CLIP text length limit
     ):
         super().__init__()
-        self.device = "cpu"  # You can change this to "cuda" if using GPU
-        self.torch_dtype = torch_dtype or torch.bfloat16
+        self.device = device
         self.max_length = max_length
-        if model_kwargs is None:
-            model_kwargs = {
-                "torch_dtype": self.torch_dtype,
-            }
-        # Example for Tiny CLIP (assuming you have an implementation):
-        # self.model = TinyCLIPModel()  # Initialize Tiny CLIP model here
-        self.model = self.initialize_tiny_clip_model(model_dir, model_kwargs)
-
-    def initialize_tiny_clip_model(self, model_dir, model_kwargs):
-        # Replace this with the actual initialization of Tiny CLIP
-        # For example, load the model and its weights here
-        # Assuming Tiny CLIP is implemented or provided
-        print(f"Loading Tiny CLIP model from {model_dir}")
-        model = None  # Placeholder for the actual Tiny CLIP model loading
-        return model
+        # Load the model and processor
+        self.model = CLIPModel.from_pretrained(model_name).to(self.device)
+        self.processor = CLIPProcessor.from_pretrained(model_name)
 
     def get_tokens_and_mask(self, texts):
-        # Modify this function to prepare the input for Tiny CLIP
-        # If Tiny CLIP uses a tokenizer, prepare the tokens here
-        tokens = texts  # Placeholder: Modify based on actual model/tokenizer
-        mask = None  # Placeholder if attention mask is used
-        return tokens, mask
+        # Tokenize the input texts
+        inputs = self.processor(
+            text=texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=self.max_length
+        ).to(self.device)
+        return inputs.input_ids, inputs.attention_mask
 
-    def get_text_embeddings(self, texts, attention_mask=True, layer_index=-1):
-        # This function also needs modification as it's designed for T5EncoderModel.
-        # Update it based on the new model, like Tiny CLIP
-        # For example, Tiny CLIP model might have a different API for embedding extraction
-
-        # Placeholder for embedding generation with the new model (Tiny CLIP):
+    def get_text_embeddings(self, texts):
+        tokens, attention_mask = self.get_tokens_and_mask(texts)
         with torch.no_grad():
-            # Assuming Tiny CLIP has an `encode_text` method to generate embeddings
-            text_embeddings = self.model.encode_text(texts)  # Placeholder for actual method
-        return text_embeddings, None  # Adjust return values as needed
+            # Generate embeddings from the text encoder
+            text_embeddings = self.model.get_text_features(
+                input_ids=tokens,
+                attention_mask=attention_mask
+            )
+        return text_embeddings
 
     @torch.no_grad()
-    def __call__(self, tokens, attention_mask, layer_index=-1):
-        # Modify this method based on how Tiny CLIP handles the forward pass
-        with torch.cuda.amp.autocast():  # Use AMP if required
-            outputs = self.model.encode_text(tokens)  # Placeholder: Modify for Tiny CLIP
-        return outputs
+    def __call__(self, texts):
+        # Directly process texts through get_text_embeddings
+        return self.get_text_embeddings(texts)
 
 # Example usage:
 
-# Initialize the Tiny CLIP embedder
-embedder = TinyCLIPEmbedder()
+# Initialize the CLIP text embedder
+embedder = CLIPTextEmbedder()
 
-# Example input text prompt
+# Example input text prompts
 texts = ["A cute husky", "A cat sitting on a chair"]
 
-# Generate text embeddings using Tiny CLIP
-tokens, mask = embedder.get_tokens_and_mask(texts)
-text_embeddings, _ = embedder.get_text_embeddings(tokens)
+# Generate text embeddings using CLIP
+text_embeddings = embedder(texts)
 
 print("Text embeddings generated:", text_embeddings)
