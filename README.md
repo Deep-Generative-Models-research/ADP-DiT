@@ -3,6 +3,8 @@
 fork 레포지토리
 https://github.com/Tencent/HunyuanDiT
 
+20241028 openai/clip-vit-base-patch32 으로 변경
+
 ### venv 생성
 
 python -m venv venv

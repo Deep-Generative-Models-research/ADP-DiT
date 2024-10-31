@@ -2,10 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 class AttentionPool(nn.Module):
     def __init__(self, spacial_dim: int, embed_dim: int, num_heads: int, output_dim: int = None):
         super().__init__()
+        self.spacial_dim = spacial_dim
+        self.embed_dim = embed_dim
+        # Initialize positional embedding with the expected dimension
         self.positional_embedding = nn.Parameter(torch.randn(spacial_dim + 1, embed_dim) / embed_dim ** 0.5)
         self.k_proj = nn.Linear(embed_dim, embed_dim)
         self.q_proj = nn.Linear(embed_dim, embed_dim)
@@ -15,8 +17,17 @@ class AttentionPool(nn.Module):
 
     def forward(self, x):
         x = x.permute(1, 0, 2)  # NLC -> LNC
+
+        # Adjust positional embedding dimension if it doesn't match the input
+        if self.positional_embedding.shape[0] != x.shape[0] + 1:
+            new_pos_emb = torch.randn(x.shape[0] + 1, self.embed_dim, device=x.device) / self.embed_dim ** 0.5
+            self.positional_embedding.data = new_pos_emb
+
+        # Concatenate mean-pooled vector and add positional embedding
         x = torch.cat([x.mean(dim=0, keepdim=True), x], dim=0)  # (L+1)NC
         x = x + self.positional_embedding[:, None, :].to(x.dtype)  # (L+1)NC
+
+        # Multi-head attention
         x, _ = F.multi_head_attention_forward(
             query=x[:1], key=x, value=x,
             embed_dim_to_check=x.shape[-1],
@@ -36,4 +47,5 @@ class AttentionPool(nn.Module):
             training=self.training,
             need_weights=False
         )
+
         return x.squeeze(0)

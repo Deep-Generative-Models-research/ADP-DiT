@@ -17,6 +17,8 @@ class CLIPTextEmbedder(nn.Module):
         # Load the model and processor
         self.model = CLIPModel.from_pretrained(model_name).to(self.device)
         self.processor = CLIPProcessor.from_pretrained(model_name)
+        # Add a projection layer to increase embedding dimension from 512 to 1024
+        self.projection = nn.Linear(512, 1024).to(self.device)
 
     def get_tokens_and_mask(self, texts):
         # Tokenize the input texts
@@ -37,6 +39,8 @@ class CLIPTextEmbedder(nn.Module):
                 input_ids=tokens,
                 attention_mask=attention_mask
             )
+            # Project embeddings to 1024 dimensions
+            text_embeddings = self.projection(text_embeddings)
         return text_embeddings
 
     @torch.no_grad()
