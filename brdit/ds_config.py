@@ -26,8 +26,8 @@ def deepspeed_config_from_args(args, global_batch_size):
             "prescale_gradients": True,
             "fp16": {
                 "enabled": args.use_fp16,
-                "loss_scale": 0,
-                "loss_scale_window": 500,
+                "loss_scale": 16.0,
+                "loss_scale_window":1000,
                 "hysteresis": 2,
                 "min_loss_scale": 1e-3,
                 "initial_scale_power": 15

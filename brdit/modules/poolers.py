@@ -7,25 +7,27 @@ class AttentionPool(nn.Module):
         super().__init__()
         self.spacial_dim = spacial_dim
         self.embed_dim = embed_dim
-        # Initialize positional embedding with the expected dimension
-        self.positional_embedding = nn.Parameter(torch.randn(spacial_dim + 1, embed_dim) / embed_dim ** 0.5)
+        self.num_heads = num_heads
+        # Initialize positional embedding with a maximum sequence length of 77
+        self.positional_embedding = nn.Parameter(torch.randn(77 + 1, embed_dim) / embed_dim ** 0.5)
         self.k_proj = nn.Linear(embed_dim, embed_dim)
         self.q_proj = nn.Linear(embed_dim, embed_dim)
         self.v_proj = nn.Linear(embed_dim, embed_dim)
         self.c_proj = nn.Linear(embed_dim, output_dim or embed_dim)
-        self.num_heads = num_heads
 
     def forward(self, x):
         x = x.permute(1, 0, 2)  # NLC -> LNC
+        actual_seq_len = x.shape[0]
 
-        # Adjust positional embedding dimension if it doesn't match the input
-        if self.positional_embedding.shape[0] != x.shape[0] + 1:
-            new_pos_emb = torch.randn(x.shape[0] + 1, self.embed_dim, device=x.device) / self.embed_dim ** 0.5
-            self.positional_embedding.data = new_pos_emb
+        # Adjust positional embedding to match input sequence length if needed
+        if actual_seq_len != 77:
+            pos_emb = self.positional_embedding[:actual_seq_len + 1]
+        else:
+            pos_emb = self.positional_embedding
 
         # Concatenate mean-pooled vector and add positional embedding
         x = torch.cat([x.mean(dim=0, keepdim=True), x], dim=0)  # (L+1)NC
-        x = x + self.positional_embedding[:, None, :].to(x.dtype)  # (L+1)NC
+        x = x + pos_emb[:, None, :].to(x.dtype)  # (L+1)NC
 
         # Multi-head attention
         x, _ = F.multi_head_attention_forward(
