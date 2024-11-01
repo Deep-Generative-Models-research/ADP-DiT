@@ -13,7 +13,7 @@ python -m venv venv
 
 ### 본인 레포지토리경로 설정 변경
 
-docker run --gpus all -it --shm-size=8g \
+docker run --gpus all -it --shm-size=2g \
  -v /home/juneyonglee/Desktop/braintumor-DiT:/workspace \
  -p 8888:8888 mirrors.tencent.com/neowywang/hunyuan-dit:cuda12
 
