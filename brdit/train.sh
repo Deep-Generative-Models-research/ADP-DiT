@@ -11,7 +11,7 @@ lr=0.0001                                                       # learning rate
 ckpt_every=9999999                                              # create a ckpt every a few steps.
 ckpt_latest_every=9999999                                        # create a ckpt named `latest.pt` every a few steps.
 ckpt_every_n_epoch=100                                           # create a ckpt every a few epochs.
-epochs=1000                                                      # additional training epochs (기존 500 + 추가 500 에포크)
+epochs=400                                                      # additional training epochs
 
 sh $(dirname "$0")/run_g.sh \
     --task-flag ${task_flag} \

@@ -19,11 +19,15 @@ class AttentionPool(nn.Module):
         x = x.permute(1, 0, 2)  # NLC -> LNC
         actual_seq_len = x.shape[0]
 
-        # Adjust positional embedding to match input sequence length if needed
-        if actual_seq_len != 77:
-            pos_emb = self.positional_embedding[:actual_seq_len + 1]
-        else:
-            pos_emb = self.positional_embedding
+        # Dynamically adjust positional embedding if needed
+        pos_emb = self.positional_embedding
+        if pos_emb.shape[0] != actual_seq_len + 1:
+            pos_emb = F.interpolate(
+                pos_emb.unsqueeze(0).permute(0, 2, 1),  # Reshape to (1, embed_dim, seq_len)
+                size=(actual_seq_len + 1),
+                mode="linear",
+                align_corners=False
+            ).squeeze(0).permute(1, 0)  # Back to (seq_len, embed_dim)
 
         # Concatenate mean-pooled vector and add positional embedding
         x = torch.cat([x.mean(dim=0, keepdim=True), x], dim=0)  # (L+1)NC
