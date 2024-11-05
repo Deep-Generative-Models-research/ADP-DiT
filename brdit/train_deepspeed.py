@@ -1,7 +1,6 @@
 import gc
 import json
 import os
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import random
 import sys
 import time
@@ -15,14 +14,13 @@ import torch.distributed as dist
 from diffusers.models import AutoencoderKL
 from peft import LoraConfig, get_peft_model
 from torch.utils.data import DataLoader
-from transformers import CLIPTextModel, CLIPTokenizer, logging as tf_logging
+from transformers import BertModel, BertTokenizer, logging as tf_logging
 from torch.utils.tensorboard import SummaryWriter
 
 from IndexKits.index_kits import ResolutionGroup
 from IndexKits.index_kits.sampler import DistributedSamplerWithStartIndex, BlockDistributedSampler
 from brdit.config import get_args
 from brdit.constants import VAE_EMA_PATH, TEXT_ENCODER, TOKENIZER
-from brdit.modules.text_encoder import CLIPTextEmbedder
 from brdit.data_loader.arrow_load_stream import TextImageArrowStream
 from brdit.diffusion import create_diffusion
 from brdit.ds_config import deepspeed_config_from_args
@@ -32,7 +30,6 @@ from brdit.modules.fp16_layers import Float16Module
 from brdit.modules.models import HUNYUAN_DIT_MODELS, HunYuanDiT
 from brdit.modules.posemb_layers import init_image_posemb
 from brdit.utils.tools import create_exp_folder, model_resume, get_trainable_params
-
 
 
 def deepspeed_initialize(args, logger, model, opt, deepspeed_config):
@@ -115,35 +112,38 @@ def save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoi
 
     return True
 
+
 @torch.no_grad()
 def prepare_model_inputs(args, batch, device, vae, text_encoder, freqs_cis_img):
-    image, text_embedding, text_embedding_mask, kwargs = batch
+    # image, text_embedding, text_embedding_mask, _, _, kwargs = batch
+    image, text_embedding, text_embedding_mask,kwargs = batch
+    # clip text embedding
+    text_embedding = text_embedding.to(device)
+    text_embedding_mask = text_embedding_mask.to(device)
+    encoder_hidden_states = text_encoder(
+        text_embedding.to(device),
+        attention_mask=text_embedding_mask.to(device),
+    )[0]
 
-    # Ensure `text_embedding` is a list of strings for the processor
-    if isinstance(text_embedding, torch.Tensor):
-        text_embedding = text_embedding.tolist()  # Convert to list if it's a tensor
-    text_embedding = [str(t) for t in text_embedding]  # Ensure all elements are strings
-
-    # Call `get_text_embeddings` to get the encoder hidden states
-    encoder_hidden_states = text_encoder.get_text_embeddings(text_embedding)
-
-    # **Add an extra dimension to `encoder_hidden_states`**
-    encoder_hidden_states = encoder_hidden_states.unsqueeze(1)  # Shape: [batch_size, 1, embedding_dim]
-    # print("encoder_hidden_states shape after unsqueeze:", encoder_hidden_states.shape)
-
-    # Additional conditions
-    image_meta_size = kwargs.get('image_meta_size', None).to(device) if args.size_cond else None
-    style = kwargs.get('style', None).to(device) if args.use_style_cond else None
+    # additional condition
+    if args.size_cond:
+        image_meta_size = kwargs['image_meta_size'].to(device)
+    else:
+        image_meta_size = None
+    if args.use_style_cond:
+        style = kwargs['style'].to(device)
+    else:
+        style = None
 
     if args.extra_fp16:
         image = image.half()
 
-    # Map input images to latent space + normalize latents
+    # Map input images to latent space + normalize latents:
     image = image.to(device)
     vae_scaling_factor = vae.config.scaling_factor
     latents = vae.encode(image).latent_dist.sample().mul_(vae_scaling_factor)
 
-    # Positional embedding
+    # positional embedding
     _, _, height, width = image.shape
     reso = f"{height}x{width}"
     cos_cis_img, sin_cis_img = freqs_cis_img[reso]
@@ -151,7 +151,7 @@ def prepare_model_inputs(args, batch, device, vae, text_encoder, freqs_cis_img):
     # Model conditions
     model_kwargs = dict(
         encoder_hidden_states=encoder_hidden_states,
-        text_embedding_mask=text_embedding_mask.to(device),
+        text_embedding_mask=text_embedding_mask,
         image_meta_size=image_meta_size,
         style=style,
         cos_cis_img=cos_cis_img,
@@ -205,10 +205,10 @@ def main(args):
     tf_logging.set_verbosity_error()
 
     # ===========================================================================
-    # Building BRDIT
+    # Building HYDIT
     # ===========================================================================
 
-    logger.info("Building BRDIT Model.")
+    logger.info("Building HYDIT Model.")
 
     image_size = args.image_size
     if len(image_size) == 1:
@@ -277,12 +277,12 @@ def main(args):
     # Setup VAE
     logger.info(f"    Loading vae from {VAE_EMA_PATH}")
     vae = AutoencoderKL.from_pretrained(VAE_EMA_PATH)
-    # Setup CLIP text encoder
+    # Setup BERT text encoder
     logger.info(f"    Loading Bert text encoder from {TEXT_ENCODER}")
-    text_encoder = CLIPTextEmbedder(model_name="openai/clip-vit-base-patch32").to(device)
-    # Setup CLIP tokenizer:
+    text_encoder = BertModel.from_pretrained(TEXT_ENCODER, False, revision=None)
+    # Setup BERT tokenizer:
     logger.info(f"    Loading Bert tokenizer from {TOKENIZER}")
-    tokenizer = CLIPTokenizer.from_pretrained(TOKENIZER)
+    tokenizer = BertTokenizer.from_pretrained(TOKENIZER)
 
     if args.extra_fp16:
         logger.info(f"    Using fp16 for extra modules: vae, text_encoder")

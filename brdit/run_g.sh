@@ -5,4 +5,4 @@ params=" \
             --rope-img base512 \
             --rope-real \
             "
-deepspeed brdit/train_deepspeed.py ${params}  "$@"
+deepspeed hydit/train_deepspeed.py ${params}  "$@"

@@ -1,13 +1,20 @@
 import random
 import time
 from pathlib import Path
+
 import numpy as np
 import torch
+
+# For reproducibility
+# torch.backends.cudnn.benchmark = False
+# torch.backends.cudnn.deterministic = True
+
 from diffusers import schedulers
 from diffusers.models import AutoencoderKL
 from loguru import logger
-from transformers import CLIPTextModel, CLIPTokenizer
+from transformers import BertModel, BertTokenizer
 from transformers.modeling_utils import logger as tf_logger
+
 from .constants import SAMPLER_FACTORY, NEGATIVE_PROMPT, TRT_MAX_WIDTH, TRT_MAX_HEIGHT, TRT_MAX_BATCH_SIZE
 from .diffusion.pipeline import StableDiffusionPipeline
 from .modules.models import HunYuanDiT, HUNYUAN_DIT_CONFIG
@@ -142,18 +149,20 @@ class End2End(object):
         # Set device and disable gradient
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         torch.set_grad_enabled(False)
-        # Disable ClipModel logging checkpoint info
+        # Disable BertModel logging checkpoint info
         tf_logger.setLevel('ERROR')
 
-        # Load the CLIP Text Encoder
-        logger.info("Loading CLIP Text Encoder...")
-        self.clip_text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32").to(self.device)
-        logger.info("Loading CLIP Text Encoder finished")
+        # ========================================================================
+        logger.info(f"Loading CLIP Text Encoder...")
+        text_encoder_path = self.root / "clip_text_encoder"
+        self.clip_text_encoder = BertModel.from_pretrained(str(text_encoder_path), False, revision=None).to(self.device)
+        logger.info(f"Loading CLIP Text Encoder finished")
 
-        # Load the CLIP Tokenizer
-        logger.info("Loading CLIP Tokenizer...")
-        self.tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-        logger.info("Loading CLIP Tokenizer finished")
+        # ========================================================================
+        logger.info(f"Loading CLIP Tokenizer...")
+        tokenizer_path = self.root / "tokenizer"
+        self.tokenizer = BertTokenizer.from_pretrained(str(tokenizer_path))
+        logger.info(f"Loading CLIP Tokenizer finished")
 
         # ========================================================================
         logger.info(f"Loading VAE...")
@@ -163,15 +172,14 @@ class End2End(object):
 
         # ========================================================================
         # Create model structure and load the checkpoint
-        logger.info(f"Building Brain-DiT model...")
+        logger.info(f"Building HunYuan-DiT model...")
         model_config = HUNYUAN_DIT_CONFIG[self.args.model]
         self.patch_size = model_config['patch_size']
         self.head_size = model_config['hidden_size'] // model_config['num_heads']
-        self.resolutions, self.freqs_cis_img = self.standard_shapes()
+        self.resolutions, self.freqs_cis_img = self.standard_shapes()   # Used for TensorRT models
         self.image_size = _to_tuple(self.args.image_size)
         latent_size = (self.image_size[0] // 8, self.image_size[1] // 8)
 
-        # Choose inference mode
         self.infer_mode = self.args.infer_mode
         if self.infer_mode in ['fa', 'torch']:
             # Build model structure
@@ -261,7 +269,7 @@ class End2End(object):
             bare_model = True
 
         if not model_path.exists():
-            raise ValueError(f"Model path does not exist: {model_path}")
+            raise ValueError(f"model_path not exists: {model_path}")
         logger.info(f"Loading torch model {model_path}...")
         if model_path.suffix == '.safetensors':
             raise NotImplementedError(f"Loading safetensors is not supported yet.")

@@ -1,7 +1,6 @@
 results/
 # Byte-compiled / optimized / DLL files
 __pycache__/
-brdit/modules/__pycache__/
 *.py[cod]
 *$py.class
 
@@ -142,5 +141,4 @@ trt/deactivate.sh
 # dataset
 dataset
 hunyuan_dit_cu12.tar
-IndexKits
-log_EXP
+
