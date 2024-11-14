@@ -203,6 +203,7 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
         self.patch_size = patch_size
         self.num_heads = num_heads
         self.hidden_size = hidden_size
+        self.text_len = args.text_len
         self.text_states_dim = args.text_states_dim  # CLIP text embedding dimension
         self.norm = args.norm
 
@@ -213,8 +214,8 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
 
         # Attention pooling
         pooler_out_dim = 1024
-        # self.pooler = AttentionPool(self.text_len, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
-        self.pooler = AttentionPool(77, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
+        self.pooler = AttentionPool(self.text_len, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
+        # self.pooler = AttentionPool(77, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
 
 
         # Dimension of the extra input vectors
@@ -509,6 +510,7 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
 HUNYUAN_DIT_CONFIG = {
     'DiT-g/2': {'depth': 40, 'hidden_size': 1408, 'patch_size': 2, 'num_heads': 16, 'mlp_ratio': 4.3637},
     'DiT-XL/2': {'depth': 28, 'hidden_size': 1152, 'patch_size': 2, 'num_heads': 16},
+    'DiT-256/2': {'depth': 24, 'hidden_size': 1024, 'patch_size': 2, 'num_heads': 16},
 }
 
 
@@ -519,8 +521,11 @@ def DiT_g_2(args, **kwargs):
 def DiT_XL_2(args, **kwargs):
     return HunYuanDiT(args, depth=28, hidden_size=1152, patch_size=2, num_heads=16, **kwargs)
 
+def DiT_256_2(args, **kwargs):
+    return HunYuanDiT(args, depth=24, hidden_size=1024, patch_size=2, num_heads=16, **kwargs)
 
 HUNYUAN_DIT_MODELS = {
     'DiT-g/2':  DiT_g_2,
     'DiT-XL/2': DiT_XL_2,
+    'DiT-256/2': DiT_256_2
 }

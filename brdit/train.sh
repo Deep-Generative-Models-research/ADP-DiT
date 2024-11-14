@@ -1,17 +1,17 @@
-task_flag="dit_g2_full_1024p"                                  # the task flag is used to identify folders.
-index_file=dataset/porcelain/jsons/porcelain.json               # index file for dataloader
+task_flag="dit_256_2"                                  # the task flag is used to identify folders.
+index_file=dataset/brain/jsons/brain.json               # index file for dataloader
 # resume_module_root=log_EXP/001-dit_g2_full_1024p/checkpoints/final.pt/mp_rank_00_model_states.pt # checkpoint root for model resume
 # resume_ema_root=log_EXP/001-dit_g2_full_1024p/checkpoints/final.pt/zero_pp_rank_0_mp_rank_00_optim_states.pt     # checkpoint root for ema resume (필요한 경우 설정)
 results_dir=./log_EXP                                           # save root for results
-batch_size=8                                                  # training batch size
-image_size=1024                                                 # training image resolution
+batch_size=128                                              # training batch size
+image_size=256                                                 # training image resolution
 grad_accu_steps=1                                               # gradient accumulation
 warmup_num_steps=0                                              # warm-up steps
 lr=0.0001                                                       # learning rate
 ckpt_every=9999999                                              # create a ckpt every a few steps.
 ckpt_latest_every=9999999                                       # create a ckpt named `latest.pt` every a few steps.
 ckpt_every_n_epoch=100                                            # create a ckpt every a few epochs.
-epochs=1000                                                      # additional training epochs
+epochs=500                                                      # additional training epochs
 
 sh $(dirname "$0")/run_g.sh \
     --task-flag ${task_flag} \

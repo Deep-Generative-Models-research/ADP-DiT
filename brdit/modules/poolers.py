@@ -16,6 +16,9 @@ class AttentionPool(nn.Module):
     def forward(self, x):
         x = x.permute(1, 0, 2)  # NLC -> LNC
         x = torch.cat([x.mean(dim=0, keepdim=True), x], dim=0)  # (L+1)NC
+        # print("!!!!!!!!!!!")
+        # print(x.size())
+        # print((self.positional_embedding[:, None, :].to(x.dtype)).size())
         x = x + self.positional_embedding[:, None, :].to(x.dtype)  # (L+1)NC
         x, _ = F.multi_head_attention_forward(
             query=x[:1], key=x, value=x,

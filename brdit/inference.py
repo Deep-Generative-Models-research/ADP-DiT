@@ -21,6 +21,8 @@ from .modules.models import HunYuanDiT, HUNYUAN_DIT_CONFIG
 from .modules.posemb_layers import get_2d_rotary_pos_embed, get_fill_resize_and_crop
 from .utils.tools import set_seeds
 from peft import LoraConfig
+from PIL import Image
+import torchvision.transforms as transforms
 
 
 class Resolution:
@@ -37,6 +39,7 @@ class ResolutionGroup:
         self.data = [
             Resolution(1024, 1024), # 1:1
             Resolution(1280, 1280), # 1:1
+            Resolution(256,256),
             Resolution(1024, 768),  # 4:3
             Resolution(1152, 864),  # 4:3
             Resolution(1280, 960),  # 4:3
@@ -60,11 +63,12 @@ STANDARD_RATIO = np.array([
     9.0 / 16.0, # 9:16
 ])
 STANDARD_SHAPE = [
-    [(1024, 1024), (1280, 1280)],   # 1:1
+    [(1024, 1024), (1280, 1280)], [(256,256)],  # 1:1
     [(1280, 960)],                # 4:3
     [(960, 1280)],                   # 3:4
     [(1280, 768)],                              # 16:9
     [(768, 1280)],                              # 9:16
+
 ]
 STANDARD_AREA = [
     np.array([w * h for w, h in shapes])
@@ -94,6 +98,20 @@ def _to_tuple(val):
         raise ValueError(f"Invalid value: {val}")
     return val
 
+def encode_image(image_path, vae, device):
+    # Load and preprocess the image
+    image = Image.open(image_path).convert("RGB")
+    preprocess = transforms.Compose([
+        transforms.Resize((256, 256)),  # Ensure this matches your model's expected input size
+        transforms.ToTensor(),
+        transforms.Normalize([0.5], [0.5])
+    ])
+    image_tensor = preprocess(image).unsqueeze(0).to(device)
+
+    # Encode the image into latents using the VAE
+    with torch.no_grad():
+        latents = vae.encode(image_tensor).latent_dist.sample() * 0.18215
+    return latents
 
 def get_pipeline(args, vae, text_encoder, tokenizer, model, device, rank,
                  infer_mode, sampler=None):
@@ -326,15 +344,16 @@ class End2End(object):
 
     def predict(self,
                 user_prompt,
-                height=1024,
-                width=1024,
+                height=256,
+                width=256,
+                image_path=None,  # New parameter for image conditioning
                 seed=None,
                 enhanced_prompt=None,
                 negative_prompt=None,
                 infer_steps=100,
                 guidance_scale=6,
                 batch_size=1,
-                src_size_cond=(1024, 1024),
+                src_size_cond=(256, 256),
                 sampler=None,
                 use_style_cond=False,
                 ):
@@ -346,6 +365,11 @@ class End2End(object):
 
         if width <= 0 or height <= 0:
             raise ValueError(f"`height` and `width` must be positive integers, got height={height}, width={width}")
+        # Process and encode image if provided
+        image_latents = None
+        if image_path:
+            image_latents = encode_image(image_path, self.vae, self.device)
+
         logger.info(f"Input (height, width) = ({height}, {width})")
         if self.infer_mode in ['fa', 'torch']:
             target_height = int((height // 16) * 16)
@@ -356,6 +380,7 @@ class End2End(object):
             logger.info(f"Align to standard shape: (height, width) = ({target_height}, {target_width})")
         else:
             raise ValueError(f"Unknown infer_mode: {self.infer_mode}")
+
 
         if not isinstance(user_prompt, str):
             raise TypeError(f"`user_prompt` must be a string, but got {type(user_prompt)}")
@@ -420,6 +445,7 @@ class End2End(object):
             num_images_per_prompt=batch_size,
             guidance_scale=guidance_scale,
             num_inference_steps=infer_steps,
+            # image_latents=image_latents,  # Pass image latents as a new argument
             image_meta_size=image_meta_size,
             style=style,
             return_dict=False,

@@ -26,8 +26,8 @@ def get_args(default_args=None):
     parser.add_argument("--extra-fp16", action="store_true", help="Use extra fp16 for vae and text_encoder.")
 
     # HunYuan-DiT
-    parser.add_argument("--model", type=str, choices=list(HUNYUAN_DIT_CONFIG.keys()), default='DiT-g/2')
-    parser.add_argument("--image-size", type=int, nargs='+', default=[1024, 1024],
+    parser.add_argument("--model", type=str, choices=list(HUNYUAN_DIT_CONFIG.keys()), default='DiT-256/2')
+    parser.add_argument("--image-size", type=int, nargs='+', default=[256, 256],
                         help='Image size (h, w). If a single value is provided, the image will be treated to '
                              '(value, value).')
     parser.add_argument("--qk-norm", action="store_true",
@@ -78,7 +78,7 @@ def get_args(default_args=None):
     # ========================================================================================================
 
     # Basic Setting
-    parser.add_argument("--prompt", type=str, default="一只小猫", help="The prompt for generating images.")
+    parser.add_argument("--prompt", type=str, default="Tumor Patient", help="The prompt for generating images.")
     parser.add_argument("--model-root", type=str, default="ckpts",
                         help="Root path of all the models, including t2i model and dialoggen model.")
     parser.add_argument("--dit-weight", type=str, default=None,
@@ -95,6 +95,10 @@ def get_args(default_args=None):
                              "1. If it is a directory, search the model in the directory."
                              "2. If it is a file, load the model directly. In this case, the --load-key is ignored."
                         )
+
+    # New Argument: Image Path
+    parser.add_argument("--image-path", type=str, default=None,
+                        help="Optional path to an image file for conditioning during inference.")
 
     # Model setting
     parser.add_argument("--load-key", type=str, choices=["ema", "module", "distill", 'merge'], default="ema",
@@ -126,7 +130,7 @@ def get_args(default_args=None):
     parser.set_defaults(enhance=True)
 
     # App
-    parser.add_argument("--lang", type=str, default="zh", choices=["zh", "en"], help="Language")
+    parser.add_argument("--lang", type=str, default="en", choices=["zh", "en"], help="Language")
 
 
     # ========================================================================================================
