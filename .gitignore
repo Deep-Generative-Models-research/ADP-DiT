@@ -23,7 +23,7 @@ var/
 wheels/
 pip-wheel-metadata/
 share/python-wheels/
-*.egg-info/
+# *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
@@ -140,6 +140,7 @@ trt/deactivate.sh
 
 # dataset
 dataset
+hunyuan_dit_cu11.tar
 hunyuan_dit_cu12.tar
 log_EXP/
 log_EXP
