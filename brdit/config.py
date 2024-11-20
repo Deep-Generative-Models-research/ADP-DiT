@@ -112,7 +112,7 @@ def get_args(default_args=None):
     parser.add_argument('--target-ratios', type=str, nargs='+', default=None,
                         help="Target ratios for multi-resolution training.")
     parser.add_argument("--cfg-scale", type=float, default=6.0, help="Guidance scale for classifier-free.")
-    parser.add_argument("--negative", type=str, default=None, help="Negative prompt.")
+    parser.add_argument("--negative", type=str, default="low quality, blurry, distorted anatomy, extra artifacts, non-medical objects, unrelated symbols, human faces, missing brain regions, incorrect contrast, cartoonish, noise, grainy patches", help="Negative prompt.")
 
     # Acceleration
     parser.add_argument("--infer-mode", type=str, choices=["fa", "torch", "trt"], default="fa",

@@ -1,10 +1,7 @@
 from pathlib import Path
-
 from loguru import logger
-
 from brdit.config import get_args
 from brdit.inference import End2End
-
 
 def inferencer():
     args = get_args()
@@ -17,13 +14,19 @@ def inferencer():
 
     return args, gen
 
-
 if __name__ == "__main__":
     args, gen = inferencer()
+
+    # Ensure input image path is passed and valid
+    if args.image_path is None:
+        logger.error("No image path provided. Please specify an image for input.")
+        raise ValueError("No image path provided.")
 
     # Run inference
     logger.info("Generating images...")
     height, width = args.image_size
+
+    # Pass the image path as part of the prediction function
     results = gen.predict(args.prompt,
                           height=height,
                           width=width,
@@ -35,12 +38,15 @@ if __name__ == "__main__":
                           batch_size=args.batch_size,
                           src_size_cond=args.size_cond,
                           use_style_cond=args.use_style_cond,
+                          image_path=args.image_path  # Ensure the image path is passed
                           )
+
     images = results['images']
 
     # Save images
     save_dir = Path('results')
     save_dir.mkdir(exist_ok=True)
+
     # Find the first available index
     all_files = list(save_dir.glob('*.png'))
     if all_files:
@@ -51,4 +57,4 @@ if __name__ == "__main__":
     for idx, pil_img in enumerate(images):
         save_path = save_dir / f"{idx + start}.png"
         pil_img.save(save_path)
-        logger.info(f"Save to {save_path}")
+        logger.info(f"Saved image to {save_path}")

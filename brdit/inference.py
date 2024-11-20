@@ -99,19 +99,42 @@ def _to_tuple(val):
     return val
 
 def encode_image(image_path, vae, device):
-    # Load and preprocess the image
-    image = Image.open(image_path).convert("RGB")
+    if image_path is None:
+        logger.error("Image path is None. Cannot encode image.")
+        return None
+
+    try:
+        # Load the image as grayscale
+        image = Image.open(image_path).convert("L")  # 'L' mode for grayscale
+        logger.info(f"Loaded grayscale image {image_path} with size: {image.size}")
+    except Exception as e:
+        logger.error(f"Error loading image {image_path}: {e}")
+        return None
+
+    # Convert grayscale to RGB by duplicating the channels
+    image = image.convert("RGB")
+
     preprocess = transforms.Compose([
         transforms.Resize((256, 256)),  # Ensure this matches your model's expected input size
         transforms.ToTensor(),
-        transforms.Normalize([0.5], [0.5])
+        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])  # Adjust for RGB normalization
     ])
-    image_tensor = preprocess(image).unsqueeze(0).to(device)
+
+    # Convert to tensor, and make sure the tensor shape is (3, height, width) for RGB
+    image_tensor = preprocess(image).unsqueeze(0).to(device)  # Add batch dimension
+
+    # Debug: Check image tensor shape and dtype
+    logger.info(f"Image tensor shape: {image_tensor.shape}, dtype: {image_tensor.dtype}")
 
     # Encode the image into latents using the VAE
-    with torch.no_grad():
-        latents = vae.encode(image_tensor).latent_dist.sample() * 0.18215
-    return latents
+    try:
+        with torch.no_grad():
+            latents = vae.encode(image_tensor).latent_dist.sample() * 0.18215
+        logger.info(f"Latents encoded successfully with shape: {latents.shape}")
+        return latents
+    except Exception as e:
+        logger.error(f"Error encoding image {image_path}: {e}")
+        return None
 
 def get_pipeline(args, vae, text_encoder, tokenizer, model, device, rank,
                  infer_mode, sampler=None):
@@ -312,6 +335,7 @@ class End2End(object):
             raise ValueError(f"You might be attempting to load the weights of HunYuanDiT version >= 1.2. You need "
                              f"to remove `--use-style-cond` and `--size-cond 1024 1024` to adapt to these weights.")
         self.model.load_state_dict(state_dict, strict=True)
+        # self.model.load_state_dict(state_dict, strict=False)
 
     def load_sampler(self, sampler=None):
         pipeline, sampler = get_pipeline(self.args,
@@ -365,10 +389,13 @@ class End2End(object):
 
         if width <= 0 or height <= 0:
             raise ValueError(f"`height` and `width` must be positive integers, got height={height}, width={width}")
+
         # Process and encode image if provided
         image_latents = None
         if image_path:
             image_latents = encode_image(image_path, self.vae, self.device)
+            if image_latents is None:
+                raise ValueError(f"Failed to encode image: {image_path}")
 
         logger.info(f"Input (height, width) = ({height}, {width})")
         if self.infer_mode in ['fa', 'torch']:
@@ -380,7 +407,6 @@ class End2End(object):
             logger.info(f"Align to standard shape: (height, width) = ({target_height}, {target_width})")
         else:
             raise ValueError(f"Unknown infer_mode: {self.infer_mode}")
-
 
         if not isinstance(user_prompt, str):
             raise TypeError(f"`user_prompt` must be a string, but got {type(user_prompt)}")
@@ -418,15 +444,15 @@ class End2End(object):
 
         start_time = time.time()
         logger.debug(f"""
-                       prompt: {user_prompt}
-              enhanced prompt: {enhanced_prompt}
-                         seed: {seed}
-              (height, width): {(target_height, target_width)}
-              negative_prompt: {negative_prompt}
-                   batch_size: {batch_size}
-               guidance_scale: {guidance_scale}
-                  infer_steps: {infer_steps}
-              image_meta_size: {size_cond}
+                    prompt: {user_prompt}
+                enhanced prompt: {enhanced_prompt}
+                            seed: {seed}
+                    (height, width): {(target_height, target_width)}
+                    negative_prompt: {negative_prompt}
+                        batch_size: {batch_size}
+                    guidance_scale: {guidance_scale}
+                        infer_steps: {infer_steps}
+                    image_meta_size: {size_cond}
         """)
         reso = f'{target_height}x{target_width}'
         if reso in self.freqs_cis_img:
@@ -437,6 +463,7 @@ class End2End(object):
         if sampler is not None and sampler != self.sampler:
             self.pipeline, self.sampler = self.load_sampler(sampler)
 
+        # Now include image_latents in the pipeline
         samples = self.pipeline(
             height=target_height,
             width=target_width,
@@ -445,7 +472,7 @@ class End2End(object):
             num_images_per_prompt=batch_size,
             guidance_scale=guidance_scale,
             num_inference_steps=infer_steps,
-            # image_latents=image_latents,  # Pass image latents as a new argument
+            image_latents=image_latents,  # Pass image latents as a new argument
             image_meta_size=image_meta_size,
             style=style,
             return_dict=False,

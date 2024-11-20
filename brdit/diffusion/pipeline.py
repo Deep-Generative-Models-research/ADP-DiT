@@ -289,13 +289,12 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
         return image
 
     def prepare_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None):
+        # Prepare latents, but now include handling for `image_latents`
         shape = (batch_size, num_channels_latents, height // self.vae_scale_factor, width // self.vae_scale_factor)
         if isinstance(generator, list) and len(generator) != batch_size:
-            raise ValueError(
-                f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
-                f" size of {batch_size}."
-            )
+            raise ValueError("Generator mismatch with batch size.")
 
+        # Use image_latents if available
         if latents is None:
             latents = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
         else:
@@ -317,6 +316,7 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
             eta: Optional[float] = 0.0,
             generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
             latents: Optional[torch.FloatTensor] = None,
+            image_latents: Optional[torch.FloatTensor] = None,  # Add image_latents as an argument
             prompt_embeds: Optional[torch.FloatTensor] = None,
             negative_prompt_embeds: Optional[torch.FloatTensor] = None,
             output_type: Optional[str] = "pil",
@@ -348,27 +348,32 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
 
         prompt_embeds, negative_prompt_embeds, attention_mask, uncond_attention_mask = \
             self.encode_prompt(prompt,
-                               device,
-                               num_images_per_prompt,
-                               do_classifier_free_guidance,
-                               negative_prompt,
-                               prompt_embeds=prompt_embeds,
-                               negative_prompt_embeds=negative_prompt_embeds,
-                               )
+                            device,
+                            num_images_per_prompt,
+                            do_classifier_free_guidance,
+                            negative_prompt,
+                            prompt_embeds=prompt_embeds,
+                            negative_prompt_embeds=negative_prompt_embeds,
+                            )
 
         self.scheduler.set_timesteps(num_inference_steps, device=device)
         timesteps = self.scheduler.timesteps
 
         num_channels_latents = self.unet.config.in_channels
+
+        # If image_latents are passed, use them
+        if latents is None and image_latents is not None:
+            latents = image_latents  # Use image_latents here
+
         latents = self.prepare_latents(batch_size * num_images_per_prompt,
-                                       num_channels_latents,
-                                       height,
-                                       width,
-                                       prompt_embeds.dtype,
-                                       device,
-                                       generator,
-                                       latents,
-                                       )
+                                    num_channels_latents,
+                                    height,
+                                    width,
+                                    prompt_embeds.dtype,
+                                    device,
+                                    generator,
+                                    latents,
+                                    )
 
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
