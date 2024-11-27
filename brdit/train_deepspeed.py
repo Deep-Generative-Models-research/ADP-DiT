@@ -148,6 +148,16 @@ def prepare_model_inputs(args, batch, device, vae, text_encoder, freqs_cis_img):
     reso = f"{height}x{width}"
     cos_cis_img, sin_cis_img = freqs_cis_img[reso]
 
+    # # Metadata processing
+    # metadata = kwargs['metadata'].to(device)  # Assuming metadata is included in the batch
+    # metadata_embedding = metadata_embedder(metadata)  # Embed the metadata
+
+    # # Combine metadata with timestep embedding
+    # timesteps = kwargs['timesteps'].to(device)  # Assuming timesteps are included in the batch
+    # timestep_embedding = metadata_embedder.mlp_t(timestep_embedding(timesteps, metadata_embedder.frequency_embedding_size))
+    # combined_embedding = torch.cat([timestep_embedding, metadata_embedding], dim=-1)
+    # combined_embedding = metadata_embedder.proj(combined_embedding)
+
     # Model conditions
     model_kwargs = dict(
         encoder_hidden_states=encoder_hidden_states,
@@ -156,6 +166,7 @@ def prepare_model_inputs(args, batch, device, vae, text_encoder, freqs_cis_img):
         style=style,
         cos_cis_img=cos_cis_img,
         sin_cis_img=sin_cis_img,
+        # metadata_embedding=combined_embedding,  # Pass combined embedding
     )
 
     return latents, model_kwargs

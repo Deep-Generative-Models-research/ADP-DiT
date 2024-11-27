@@ -235,10 +235,28 @@ class End2End(object):
 
             lora_ckpt = args.lora_ckpt
             if lora_ckpt is not None and lora_ckpt != "":
-                logger.info(f"Loading Lora checkpoint {lora_ckpt}...")
+                lora_ckpt_path = Path(lora_ckpt)
 
-                self.model.load_adapter(lora_ckpt)
+                # 디버깅: 경로 출력
+                logger.debug(f"Provided LoRA checkpoint path: {lora_ckpt_path}")
+
+                # 경로가 디렉토리인지 파일인지 확인
+                if lora_ckpt_path.is_dir():
+                    safetensor_files = list(lora_ckpt_path.glob("*.safetensors"))
+                    if len(safetensor_files) == 0:
+                        raise ValueError(f"No .safetensors file found in directory: {lora_ckpt_path}")
+                    elif len(safetensor_files) > 1:
+                        logger.warning(f"Multiple .safetensors files found. Using the first one: {safetensor_files[0]}")
+                    lora_ckpt_path = safetensor_files[0]
+                elif not lora_ckpt_path.is_file():
+                    raise ValueError(f"Invalid LoRA checkpoint path: {lora_ckpt_path}. Must be a directory or a .safetensors file.")
+
+                logger.info(f"Loading LoRA checkpoint from: {lora_ckpt_path}")
+                self.model.load_adapter(str(lora_ckpt_path))
                 self.model.merge_and_unload()
+
+
+
 
             self.model.eval()
             logger.info(f"Loading torch model finished")
@@ -279,6 +297,7 @@ class End2End(object):
     def load_torch_weights(self):
         load_key = self.args.load_key
         if self.args.dit_weight is not None:
+            logger.debug(f"Checking dit_weight path: {self.args.dit_weight}")
             dit_weight = Path(self.args.dit_weight)
             if dit_weight.is_dir():
                 files = list(dit_weight.glob("*.pt"))

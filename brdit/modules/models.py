@@ -16,6 +16,7 @@ from transformers.integrations import PeftAdapterMixin
 
 from .attn_layers import Attention, FlashCrossMHAModified, FlashSelfMHAModified, CrossAttention
 from .embedders import TimestepEmbedder, PatchEmbed, timestep_embedding
+# ,TimestepEmbedderWithMetadata,MetadataEmbedder
 from .norm_layers import RMSNorm
 from .poolers import AttentionPool
 
@@ -212,6 +213,14 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
             log_fn(f"    Enable Flash Attention.")
         qk_norm = args.qk_norm  # See http://arxiv.org/abs/2302.05442 for details.
 
+        # # Metadata embedding
+        # self.metadata_dim = args.metadata_dim  # Example: number of metadata fields
+        # self.metadata_embedder = nn.Sequential(
+        #     nn.Linear(self.metadata_dim, hidden_size * 4),
+        #     FP32_SiLU(),
+        #     nn.Linear(hidden_size * 4, hidden_size),
+        # )
+
         # Attention pooling
         pooler_out_dim = 1024
         self.pooler = AttentionPool(self.text_len, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
@@ -289,6 +298,7 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
                 text_embedding_mask=None,
                 image_meta_size=None,
                 style=None,
+                # metadata=None,  # Add metadata as input
                 cos_cis_img=None,
                 sin_cis_img=None,
                 return_dict=True,
@@ -349,6 +359,11 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
         if style is not None:
             style_embedding = self.style_embedder(style)
             extra_vec = torch.cat([extra_vec, style_embedding], dim=1)
+
+        # # Embed metadata and add to conditioning vector
+        # if metadata is not None:
+        #     metadata_embedding = self.metadata_embedder(metadata)
+        #     extra_vec = torch.cat([extra_vec, metadata_embedding], dim=1)
 
         # Concatenate all extra vectors
         c = t + self.extra_embedder(extra_vec)  # [B, D]
