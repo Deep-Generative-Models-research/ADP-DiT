@@ -47,14 +47,10 @@ if __name__ == "__main__":
     save_dir = Path('results')
     save_dir.mkdir(exist_ok=True)
 
-    # Find the first available index
-    all_files = list(save_dir.glob('*.png'))
-    if all_files:
-        start = max([int(f.stem) for f in all_files]) + 1
-    else:
-        start = 0
-
+    # Save using cfg_scale and infer_steps in filename
+    cfg_scale = args.cfg_scale
+    infer_steps = args.infer_steps
     for idx, pil_img in enumerate(images):
-        save_path = save_dir / f"{idx + start}.png"
+        save_path = save_dir / f"image_cfg{cfg_scale}_steps{infer_steps}_idx{idx}.png"
         pil_img.save(save_path)
         logger.info(f"Saved image to {save_path}")
