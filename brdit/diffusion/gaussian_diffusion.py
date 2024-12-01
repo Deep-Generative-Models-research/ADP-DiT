@@ -233,7 +233,253 @@ class GaussianDiffusion:
             "ddpm": self.p_sample_loop,
             "ddim": self.ddim_sample_loop,
             "plms": self.plms_sample_loop,
+            "stochastic_ddim": self.stochastic_ddim_sample,
+            "dpm_solver": self.dpm_solver_sample,
+            "pseudo_langevin": self.pseudo_langevin_dynamics,
+            "dpmpp_3m_sde_exp" : self.dpmpp_3m_sde_exp_sample,
+            "dpmpp_3m_sde_karras" : self.dpmpp_3m_sde_karras_sample,
+            "dpmpp_2m_sde_exponential": self.dpmpp_2m_sde_exponential_sample
+
+
         }
+    def dpmpp_2m_sde_exponential_sample(
+        self, model, x, t, clip_denoised=True, denoised_fn=None, model_kwargs=None
+    ):
+        """
+        DPM++ 2M SDE Exponential 샘플러 함수
+
+        :param model: Diffusion 모델.
+        :param x: 현재 상태의 샘플.
+        :param t: 현재 시간 스텝.
+        :param clip_denoised: True이면 x_start를 [-1, 1]로 클리핑.
+        :param denoised_fn: x_start 예측 후 추가로 처리하는 함수.
+        :param model_kwargs: 모델에 전달할 추가 인자들.
+        :return: 다음 샘플과 예측된 x_start.
+        """
+        if model_kwargs is None:
+            model_kwargs = {}
+
+        def process_xstart(x):
+            if denoised_fn is not None:
+                x = denoised_fn(x)
+            if clip_denoised:
+                return x.clamp(-1, 1)
+            return x
+
+        # 모델 출력 및 초기 상태 예측 계산
+        out = self.p_mean_variance(
+            model,
+            x,
+            t,
+            clip_denoised=clip_denoised,
+            denoised_fn=denoised_fn,
+            model_kwargs=model_kwargs,
+        )
+        eps = self._predict_eps_from_xstart(x, t, out["pred_xstart"])
+
+        # Exponential 스케줄링 계산
+        alpha_bar = self._extract_into_tensor(self.alphas_cumprod, t, x.shape)
+        alpha_bar_next = self._extract_into_tensor(self.alphas_cumprod_next, t, x.shape)
+
+        exp_decay = alpha_bar.log() - alpha_bar_next.log()
+        h = exp_decay.exp()
+
+        # SDE 업데이트
+        drift = h * eps
+        diffusion = (h**2).sqrt() * th.randn_like(x)
+        x_next = x - drift + diffusion
+
+        return {
+            "sample": x_next,
+            "pred_xstart": process_xstart(out["pred_xstart"]),
+        }
+
+    def dpmpp_3m_sde_karras_sample(
+        self, model, x, t, clip_denoised=True, denoised_fn=None, model_kwargs=None
+    ):
+        """
+        DPM++ 3M SDE Karras 샘플러 함수
+
+        :param model: Diffusion 모델.
+        :param x: 현재 상태의 샘플.
+        :param t: 현재 시간 스텝.
+        :param clip_denoised: True이면 x_start를 [-1, 1]로 클리핑.
+        :param denoised_fn: x_start 예측 후 추가로 처리하는 함수.
+        :param model_kwargs: 모델에 전달할 추가 인자들.
+        :return: 다음 샘플과 예측된 x_start.
+        """
+        if model_kwargs is None:
+            model_kwargs = {}
+
+        def process_xstart(x):
+            if denoised_fn is not None:
+                x = denoised_fn(x)
+            if clip_denoised:
+                return x.clamp(-1, 1)
+            return x
+
+        # 모델의 출력과 x_start 예측 계산
+        out = self.p_mean_variance(
+            model,
+            x,
+            t,
+            clip_denoised=clip_denoised,
+            denoised_fn=denoised_fn,
+            model_kwargs=model_kwargs,
+        )
+        eps = self._predict_eps_from_xstart(x, t, out["pred_xstart"])
+
+        # Karras 스케줄링 계산
+        alpha_bar = self._extract_into_tensor(self.alphas_cumprod, t, x.shape)
+        alpha_bar_next = self._extract_into_tensor(self.alphas_cumprod_next, t, x.shape)
+
+        h = alpha_bar.sqrt() - alpha_bar_next.sqrt()
+
+        # SDE 업데이트
+        drift = h * eps
+        diffusion = (h**2).sqrt() * th.randn_like(x)
+        x_next = x - drift + diffusion
+
+        return {
+            "sample": x_next,
+            "pred_xstart": process_xstart(out["pred_xstart"]),
+        }
+
+    def dpmpp_3m_sde_exp_sample(
+        self, model, x, t, clip_denoised=True, denoised_fn=None, model_kwargs=None
+    ):
+        """
+        DPM++ 3M SDE Exponential 샘플러 함수
+
+        :param model: Diffusion 모델.
+        :param x: 현재 상태의 샘플.
+        :param t: 현재 시간 스텝.
+        :param clip_denoised: True이면 x_start를 [-1, 1]로 클리핑.
+        :param denoised_fn: x_start 예측 후 추가로 처리하는 함수.
+        :param model_kwargs: 모델에 전달할 추가 인자들.
+        :return: 다음 샘플과 예측된 x_start.
+        """
+        if model_kwargs is None:
+            model_kwargs = {}
+
+        def process_xstart(x):
+            if denoised_fn is not None:
+                x = denoised_fn(x)
+            if clip_denoised:
+                return x.clamp(-1, 1)
+            return x
+
+        # 모델의 출력과 x_start 예측 계산
+        out = self.p_mean_variance(
+            model,
+            x,
+            t,
+            clip_denoised=clip_denoised,
+            denoised_fn=denoised_fn,
+            model_kwargs=model_kwargs,
+        )
+        eps = self._predict_eps_from_xstart(x, t, out["pred_xstart"])
+
+        # alpha_bar 값 추출
+        alpha_bar = self._extract_into_tensor(self.alphas_cumprod, t, x.shape)
+        alpha_bar_next = self._extract_into_tensor(self.alphas_cumprod_next, t, x.shape)
+
+        # 시간 스텝 차이 계산 (지수적 스케줄링 적용)
+        h = (alpha_bar_next / alpha_bar).sqrt()
+
+        # SDE 업데이트
+        drift = (1 - h) * x
+        diffusion = (1 - h**2).sqrt() * eps
+        x_next = drift + diffusion
+
+        return {
+            "sample": x_next,
+            "pred_xstart": process_xstart(out["pred_xstart"]),
+        }
+
+    def pseudo_langevin_dynamics(
+        model,
+        x,
+        t,
+        noise_scale=0.1,
+        grad_scale=1.0,
+        model_kwargs=None,
+    ):
+        noise = noise_scale * th.randn_like(x)
+        grad = model.get_eps(model, x, t, model_kwargs) * grad_scale
+        x = x - grad + noise
+        return x
+
+
+    def dpm_solver_sample(
+        model,
+        x,
+        t,
+        clip_denoised=True,
+        denoised_fn=None,
+        cond_fn=None,
+        model_kwargs=None,
+        **kwargs,
+    ):
+        """
+        DPM-Solver++ Sampler
+        """
+        def solver_step(x, t, t_next, model_kwargs):
+            out = model.p_mean_variance(
+                x,
+                t,
+                clip_denoised=clip_denoised,
+                denoised_fn=denoised_fn,
+                model_kwargs=model_kwargs,
+            )
+            eps = model._predict_eps_from_xstart(x, t, out["pred_xstart"])
+            alpha_bar = model._extract_into_tensor(model.alphas_cumprod, t, x.shape)
+            alpha_bar_next = model._extract_into_tensor(model.alphas_cumprod_next, t, x.shape)
+
+            h = t_next - t
+            x_next = (th.sqrt(alpha_bar_next) / th.sqrt(alpha_bar)) * x - h * eps
+            return x_next
+
+        indices = list(range(model.num_timesteps))[::-1]
+        for i, t in enumerate(indices[:-1]):
+            t_next = indices[i + 1]
+            x = solver_step(x, t, t_next, model_kwargs)
+
+        return {"sample": x, "pred_xstart": model.eps_to_pred_xstart(x, eps, t)}
+
+    def stochastic_ddim_sample(
+        model,
+        x,
+        t,
+        eta=0.1,  # noise level for stochasticity
+        clip_denoised=True,
+        denoised_fn=None,
+        cond_fn=None,
+        model_kwargs=None,
+    ):
+        out = model.p_mean_variance(
+            x,
+            t,
+            clip_denoised=clip_denoised,
+            denoised_fn=denoised_fn,
+            model_kwargs=model_kwargs,
+        )
+
+        # Calculate epsilon
+        eps = model._predict_eps_from_xstart(x, t, out["pred_xstart"])
+        alpha_bar = model._extract_into_tensor(model.alphas_cumprod, t, x.shape)
+        alpha_bar_prev = model._extract_into_tensor(model.alphas_cumprod_prev, t, x.shape)
+
+        sigma = eta * th.sqrt((1 - alpha_bar_prev) / (1 - alpha_bar)) * th.sqrt(1 - alpha_bar / alpha_bar_prev)
+
+        # Generate noise for stochasticity
+        noise = th.randn_like(x)
+        mean_pred = out["pred_xstart"] * th.sqrt(alpha_bar_prev) + th.sqrt(1 - alpha_bar_prev - sigma**2) * eps
+        nonzero_mask = (t != 0).float().view(-1, *([1] * (len(x.shape) - 1)))
+
+        sample = mean_pred + nonzero_mask * sigma * noise
+        return {"sample": sample, "pred_xstart": out["pred_xstart"]}
+
 
     def q_mean_variance(self, x_start, t):
         """
