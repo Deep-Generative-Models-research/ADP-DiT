@@ -4,6 +4,8 @@ import deepspeed
 from .constants import *
 from .diffusion.gaussian_diffusion import ModelVarType
 from .modules.models import HUNYUAN_DIT_CONFIG
+from brdit.lr_scheduler import add_tuning_arguments
+
 
 
 def model_var_type(value):
@@ -15,6 +17,7 @@ def model_var_type(value):
 
 def get_args(default_args=None):
     parser = argparse.ArgumentParser()
+    add_tuning_arguments(parser)
     parser.add_argument("--task-flag", type=str)
 
     # General Setting

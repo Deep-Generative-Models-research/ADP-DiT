@@ -14,7 +14,8 @@ LR_RANGE_TEST = 'LRRangeTest'
 ONE_CYCLE = 'OneCycle'
 WARMUP_LR = 'WarmupLR'
 WARMUP_DECAY_LR = 'WarmupDecayLR'
-VALID_LR_SCHEDULES = [LR_RANGE_TEST, ONE_CYCLE, WARMUP_LR, WARMUP_DECAY_LR]
+COSINE_ANNEALING_RESTARTS = 'CosineAnnealingRestarts'
+VALID_LR_SCHEDULES = [LR_RANGE_TEST, ONE_CYCLE, WARMUP_LR, WARMUP_DECAY_LR,COSINE_ANNEALING_RESTARTS]
 
 LR_RANGE_TEST_MIN_LR = 'lr_range_test_min_lr'
 LR_RANGE_TEST_STEP_RATE = 'lr_range_test_step_rate'
@@ -104,6 +105,12 @@ def add_tuning_arguments(parser):
                        type=str,
                        default=WARMUP_LOG_RATE,
                        help='WarmupLR increasing function during warmup')
+
+    # CosineAnnealingRestarts
+    group.add_argument('--t_max', type=int, default=10, help='Maximum iterations for the first cycle.')
+    group.add_argument('--eta_min', type=float, default=1e-5, help='Minimum learning rate during decay.')
+    group.add_argument('--t_mult', type=float, default=1.0, help='Factor to increase cycle duration after each restart.')
+
     return parser
 
 
@@ -206,10 +213,17 @@ def get_config_from_args(args):
         override_lr_range_test_params(args, config['params'])
     elif args.lr_schedule == ONE_CYCLE:
         override_1cycle_params(args, config['params'])
+    elif args.lr_schedule == COSINE_ANNEALING_RESTARTS:
+        config['params'] = {
+            "t_max": args.t_max,
+            "eta_min": args.eta_min,
+            "t_mult": args.t_mult
+        }
     else:
         override_warmupLR_params(args, config['params'])
 
     return config, None
+
 
 
 def get_lr_from_config(config):
@@ -759,3 +773,79 @@ class WarmupDecayLR(WarmupLR):
             0.0,
             float(self.total_num_steps - self.last_batch_iteration) /
             float(max(1.0, self.total_num_steps - self.warmup_num_steps)))
+
+class CosineAnnealingRestarts:
+    """
+    Sets the learning rate of each parameter group according to the cosine annealing with restarts schedule.
+    The learning rate decreases following a cosine curve and is restarted periodically.
+
+    Args:
+        optimizer (Optimizer): Wrapped optimizer.
+        t_max (int): Maximum number of iterations for the first cycle.
+        eta_min (float): Minimum learning rate. Default: 0.
+        last_epoch (int): The index of the last epoch. Default: -1.
+        t_mult (float): Factor to increase cycle duration after each restart. Default: 1.0.
+
+    Example:
+        >>> optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+        >>> scheduler = CosineAnnealingRestarts(optimizer, t_max=10, eta_min=0.001)
+        >>> for epoch in range(100):
+        >>>     train(...)
+        >>>     scheduler.step()
+    """
+    def __init__(self, optimizer: Optimizer, t_max: int, eta_min: float = 0, t_mult: float = 1.0, last_epoch: int = -1):
+        if t_max <= 0:
+            raise ValueError(f"Expected positive t_max, got {t_max}")
+        self.optimizer = get_torch_optimizer(optimizer)
+        self.t_max = t_max
+        self.eta_min = eta_min
+        self.t_mult = t_mult
+        self.base_lrs = [group['lr'] for group in self.optimizer.param_groups]
+        self.last_epoch = last_epoch
+        self.current_epoch = 0
+        self.cycle = 0
+        self.t_current = t_max
+
+        # Initialize learning rate
+        self.step(last_epoch + 1)
+
+    def get_lr(self):
+        if self.last_epoch == 0 or self.last_epoch == -1:
+            return self.base_lrs
+        cos_out = math.cos(math.pi * self.current_epoch / self.t_current) + 1
+        return [self.eta_min + (base_lr - self.eta_min) * cos_out / 2 for base_lr in self.base_lrs]
+
+    def step(self, epoch=None):
+        if epoch is None:
+            epoch = self.last_epoch + 1
+
+        self.last_epoch = epoch
+        self.current_epoch = epoch - self.t_max * self.cycle
+
+        if self.current_epoch >= self.t_current:
+            self.cycle += 1
+            self.current_epoch = 0
+            self.t_current = int(self.t_current * self.t_mult)
+
+        for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
+            param_group['lr'] = lr
+
+    def state_dict(self):
+        return {
+            'base_lrs': self.base_lrs,
+            'last_epoch': self.last_epoch,
+            't_max': self.t_max,
+            'eta_min': self.eta_min,
+            't_mult': self.t_mult,
+            'cycle': self.cycle,
+            't_current': self.t_current,
+        }
+
+    def load_state_dict(self, state_dict):
+        self.base_lrs = state_dict['base_lrs']
+        self.last_epoch = state_dict['last_epoch']
+        self.t_max = state_dict['t_max']
+        self.eta_min = state_dict['eta_min']
+        self.t_mult = state_dict['t_mult']
+        self.cycle = state_dict['cycle']
+        self.t_current = state_dict['t_current']

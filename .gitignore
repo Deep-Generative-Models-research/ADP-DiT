@@ -144,3 +144,8 @@ hunyuan_dit_cu11.tar
 hunyuan_dit_cu12.tar
 log_EXP/
 log_EXP
+log_EXP_gpu1/
+log_EXP_gpu2/
+results_prompt_Strength1/
+results_prompt_Strength2/
+results_prompt_Strength3/

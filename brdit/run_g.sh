@@ -1,8 +1,10 @@
-model='DiT-XL/2'
+model='DiT-g/2'
 params=" \
             --qk-norm \
             --model ${model} \
             --rope-img base512 \
             --rope-real \
             "
-deepspeed brdit/train_deepspeed.py ${params}  "$@"
+
+# 추가: MASTER_PORT 환경 변수 사용
+deepspeed --master_port=${MASTER_PORT} brdit/train_deepspeed.py ${params} "$@"

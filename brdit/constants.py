@@ -1,4 +1,5 @@
 import torch
+from brdit.diffusion.gaussian_diffusion import GaussianDiffusion
 
 # =======================================================
 
@@ -69,6 +70,43 @@ SAMPLER_FACTORY = {
             'trained_betas': None,
             'solver_order': 2,
             'algorithm_type': 'dpmsolver++',
+        }
+    },
+   # Corrected samplers with properly initialized GaussianDiffusion
+    'dpmpp_2m_sde_exp': {
+        'scheduler': GaussianDiffusion.dpmpp_2m_sde_exponential_sample,
+        'name': 'DPM++ 2M SDE Exp',
+        'kwargs': {
+            'beta_schedule': 'scaled_linear',
+            'beta_start': 0.00085,
+            'beta_end': 0.02,
+            'prediction_type': 'v_prediction',
+            'clip_denoised': True,
+            'algorithm_type': 'dpmpp_2m_sde_exponential',
+        }
+    },
+    'dpmpp_3m_sde_karras': {
+        'scheduler': GaussianDiffusion.dpmpp_3m_sde_karras_sample,
+        'name': 'DPM++ 3M SDE Karras',
+        'kwargs': {
+            'beta_schedule': 'scaled_linear',
+            'beta_start': 0.00085,
+            'beta_end': 0.02,
+            'prediction_type': 'v_prediction',
+            'clip_denoised': True,
+            'algorithm_type': 'dpmpp_3m_sde_karras',
+        }
+    },
+    'dpmpp_3m_sde_exp': {
+        'scheduler': GaussianDiffusion.dpmpp_3m_sde_exp_sample,
+        'name': 'DPM++ 3M SDE Exp',
+        'kwargs': {
+            'beta_schedule': 'scaled_linear',
+            'beta_start': 0.00085,
+            'beta_end': 0.02,
+            'prediction_type': 'v_prediction',
+            'clip_denoised': True,
+            'algorithm_type': 'dpmpp_3m_sde_exponential',
         }
     },
 }

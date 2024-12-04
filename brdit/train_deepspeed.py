@@ -24,13 +24,12 @@ from brdit.constants import VAE_EMA_PATH, TEXT_ENCODER, TOKENIZER
 from brdit.data_loader.arrow_load_stream import TextImageArrowStream
 from brdit.diffusion import create_diffusion
 from brdit.ds_config import deepspeed_config_from_args
-from brdit.lr_scheduler import WarmupLR
+from brdit.lr_scheduler import WarmupLR, add_tuning_arguments
 from brdit.modules.ema import EMA
 from brdit.modules.fp16_layers import Float16Module
 from brdit.modules.models import HUNYUAN_DIT_MODELS, HunYuanDiT
 from brdit.modules.posemb_layers import init_image_posemb
 from brdit.utils.tools import create_exp_folder, model_resume, get_trainable_params
-
 
 def deepspeed_initialize(args, logger, model, opt, deepspeed_config):
     logger.info(f"Initialize deepspeed...")
