@@ -1,14 +1,12 @@
-
 ## Using LoRA to fine-tune HunyuanDiT
-
 
 ### Instructions
 
- The dependencies and installation are basically the same as the [**base model**](https://huggingface.co/Tencent-Hunyuan/HunyuanDiT-v1.2).
+The dependencies and installation are basically the same as the [**base model**](https://huggingface.co/Tencent-Hunyuan/HunyuanDiT-v1.2).
 
- We provide two types of trained LoRA weights for you to test.
- 
- Then download the model using the following commands:
+We provide two types of trained LoRA weights for you to test.
+
+Then download the model using the following commands:
 
 ```bash
 cd HunyuanDiT
@@ -20,11 +18,12 @@ python sample_t2i.py --prompt "青花瓷风格，一只猫在追蝴蝶"  --no-en
 ```
 
 Examples of training data and inference results are as follows:
+
 <table>
   <tr>
     <td colspan="4" align="center">Examples of training data</td>
   </tr>
-  
+
   <tr>
     <td align="center"><img src="asset/porcelain/train/0.png" alt="Image 0" width="200"/></td>
     <td align="center"><img src="asset/porcelain/train/1.png" alt="Image 1" width="200"/></td>
@@ -53,17 +52,16 @@ Examples of training data and inference results are as follows:
     <td align="center">青花瓷风格，一只羊（Porcelain style, a sheep.）</td>
     <td align="center">青花瓷风格，一个女孩在雨中跳舞（Porcelain style, a girl dancing in the rain.）</td>
   </tr>
-  
+
 </table>
 
-
 ### Training
-    
-We provide three types of weights for fine-tuning LoRA, `ema`, `module` and `distill`, and you can choose according to the actual effect. By default, we use `ema` weights. 
 
-Here is an example for LoRA with HunYuanDiT v1.2, we load the `distill` weights into the main model and perform LoRA fine-tuning through the `resume_module_root=./ckpts/t2i/model/pytorch_model_distill.pt` setting. 
+We provide three types of weights for fine-tuning LoRA, `ema`, `module` and `distill`, and you can choose according to the actual effect. By default, we use `ema` weights.
 
-If multiple resolution are used, you need to add the `--multireso` and `--reso-step 64 ` parameter. 
+Here is an example for LoRA with HunYuanDiT v1.2, we load the `distill` weights into the main model and perform LoRA fine-tuning through the `resume_module_root=./ckpts/t2i/model/pytorch_model_distill.pt` setting.
+
+If multiple resolution are used, you need to add the `--multireso` and `--reso-step 64 ` parameter.
 
 If you want to train LoRA with HunYuanDiT v1.1, you could add `--use-style-cond`, `--size-cond 1024 1024` and `--beta-end 0.03`.
 
@@ -121,14 +119,13 @@ PYTHONPATH=./ deepspeed hydit/train_deepspeed.py \
 
 Recommended parameter settings
 
-|     Parameter     |  Description  |          Recommended Parameter Value                               | Note|
-|:---------------:|:---------:|:---------------------------------------------------:|:--:|
-|   `--batch-size` |    Training batch size    |        1        | Depends on GPU memory|
-|   `--grad-accu-steps` |    Size of gradient accumulation    |       2        | - |
-|   `--rank` |    Rank of lora    |       64        | Choosing from 8-128 |
-|   `--max-training-steps` |    Training steps  |       2000        | Depend on training data size, for reference apply 2000 steps on 100 images|
-|   `--lr` |    Learning rate  |        0.0001        | - |
-
+|       Parameter        |          Description          | Recommended Parameter Value |                                    Note                                    |
+| :--------------------: | :---------------------------: | :-------------------------: | :------------------------------------------------------------------------: |
+|     `--batch-size`     |      Training batch size      |              1              |                           Depends on GPU memory                            |
+|  `--grad-accu-steps`   | Size of gradient accumulation |              2              |                                     -                                      |
+|        `--rank`        |         Rank of lora          |             64              |                            Choosing from 8-128                             |
+| `--max-training-steps` |        Training steps         |            2000             | Depend on training data size, for reference apply 2000 steps on 100 images |
+|         `--lr`         |         Learning rate         |           0.0001            |                                     -                                      |
 
 ### Inference
 
@@ -142,6 +139,7 @@ python sample_t2i.py --infer-mode fa --prompt "青花瓷风格，一只小狗"  
 ```
 
 b. Using LoRA in gradio
+
 ```bash
 python app/hydit_app.py --infer-mode fa --no-enhance --lora-ckpt log_EXP/001-lora_porcelain_ema_rank64/checkpoints/0001000.pt/
 ```
@@ -154,8 +152,7 @@ We provide the `--output-merge-path` parameter to set the path for saving the me
 PYTHONPATH=./ python lora/merge.py --lora-ckpt log_EXP/001-lora_porcelain_ema_rank64/checkpoints/0000100.pt/ --output-merge-path ./ckpts/t2i/model/pytorch_model_merge.pt
 ```
 
-d. Regarding how to use the LoRA weights we trained in diffusion, we provide the following script. To ensure compatibility with the diffuser, some modifications are made, which means that LoRA cannot be directly loaded. 
-
+d. Regarding how to use the LoRA weights we trained in diffusion, we provide the following script. To ensure compatibility with the diffuser, some modifications are made, which means that LoRA cannot be directly loaded.
 
 ```python
 import torch
@@ -164,13 +161,13 @@ from diffusers import HunyuanDiTPipeline
 num_layers = 40
 def load_hunyuan_dit_lora(transformer_state_dict, lora_state_dict, lora_scale):
     for i in range(num_layers):
-        Wqkv = torch.matmul(lora_state_dict[f"blocks.{i}.attn1.Wqkv.lora_B.weight"], lora_state_dict[f"blocks.{i}.attn1.Wqkv.lora_A.weight"]) 
+        Wqkv = torch.matmul(lora_state_dict[f"blocks.{i}.attn1.Wqkv.lora_B.weight"], lora_state_dict[f"blocks.{i}.attn1.Wqkv.lora_A.weight"])
         q, k, v = torch.chunk(Wqkv, 3, dim=0)
         transformer_state_dict[f"blocks.{i}.attn1.to_q.weight"] += lora_scale * q
         transformer_state_dict[f"blocks.{i}.attn1.to_k.weight"] += lora_scale * k
         transformer_state_dict[f"blocks.{i}.attn1.to_v.weight"] += lora_scale * v
 
-        out_proj = torch.matmul(lora_state_dict[f"blocks.{i}.attn1.out_proj.lora_B.weight"], lora_state_dict[f"blocks.{i}.attn1.out_proj.lora_A.weight"]) 
+        out_proj = torch.matmul(lora_state_dict[f"blocks.{i}.attn1.out_proj.lora_B.weight"], lora_state_dict[f"blocks.{i}.attn1.out_proj.lora_A.weight"])
         transformer_state_dict[f"blocks.{i}.attn1.to_out.0.weight"] += lora_scale * out_proj
 
         q_proj = torch.matmul(lora_state_dict[f"blocks.{i}.attn2.q_proj.lora_B.weight"], lora_state_dict[f"blocks.{i}.attn2.q_proj.lora_A.weight"])
@@ -181,12 +178,12 @@ def load_hunyuan_dit_lora(transformer_state_dict, lora_state_dict, lora_scale):
         transformer_state_dict[f"blocks.{i}.attn2.to_k.weight"] += lora_scale * k
         transformer_state_dict[f"blocks.{i}.attn2.to_v.weight"] += lora_scale * v
 
-        out_proj = torch.matmul(lora_state_dict[f"blocks.{i}.attn2.out_proj.lora_B.weight"], lora_state_dict[f"blocks.{i}.attn2.out_proj.lora_A.weight"]) 
+        out_proj = torch.matmul(lora_state_dict[f"blocks.{i}.attn2.out_proj.lora_B.weight"], lora_state_dict[f"blocks.{i}.attn2.out_proj.lora_A.weight"])
         transformer_state_dict[f"blocks.{i}.attn2.to_out.0.weight"] += lora_scale * out_proj
-    
+
     q_proj = torch.matmul(lora_state_dict["pooler.q_proj.lora_B.weight"], lora_state_dict["pooler.q_proj.lora_A.weight"])
     transformer_state_dict["time_extra_emb.pooler.q_proj.weight"] += lora_scale * q_proj
-    
+
     return transformer_state_dict
 
 pipe = HunyuanDiTPipeline.from_pretrained("Tencent-Hunyuan/HunyuanDiT-v1.2-Diffusers", torch_dtype=torch.float16)
@@ -205,12 +202,11 @@ pipe.transformer.load_state_dict(transformer_state_dict)
 
 prompt = "玉石绘画风格，一只猫在追蝴蝶"
 image = pipe(
-    prompt, 
+    prompt,
     num_inference_steps=100,
-    guidance_scale=6.0, 
+    guidance_scale=6.0,
 ).images[0]
 image.save('img.png')
 ```
-
 
 e. For more information, please refer to [HYDiT-LoRA](https://huggingface.co/Tencent-Hunyuan/HYDiT-LoRA).

@@ -1,5 +1,5 @@
 model='DiT-256/2'                                                   # model type
-task_flag="lora_brdit_ema_rank64"                             # task flag
+task_flag="lora_adgdit_ema_rank64"                             # task flag
 resume_module_root=/workspace/log_EXP/001-dit_256_2/checkpoints/e0500.pt/zero_pp_rank_0_mp_rank_00_optim_states.pt    # resume checkpoint
 index_file=/workspace/dataset/AD_150/jsons/AD_150.json                # the selected data indices
 results_dir=./log_EXP                                             # save root for results
@@ -13,7 +13,7 @@ ckpt_latest_every=2000                                            # create a ckp
 rank=64                                                           # rank of lora
 max_training_steps=2000                                          # Maximum training iteration steps
 
-PYTHONPATH=./ deepspeed brdit/train_deepspeed.py \
+PYTHONPATH=./ deepspeed adgdit/train_deepspeed.py \
     --task-flag ${task_flag} \
     --model ${model} \
     --training-parts lora \
@@ -54,7 +54,7 @@ python sample_t2i.py --infer-mode fa \
     --prompt "Alzheimer Disease,Female, 84 years old, 24 months from first visit, Z-coordinate 150" \
     --no-enhance --load-key ema \
     --image-path "/workspace/dataset/AD_150/images/002_S_1280_2014-03-14_15_13_20.0_150.png" \
-    --lora-ckpt /workspace/log_EXP/003-lora_brdit_ema_rank64/checkpoints/final.pt/adapter_model.safetensors
+    --lora-ckpt /workspace/log_EXP/003-lora_adgdit_ema_rank64/checkpoints/final.pt/adapter_model.safetensors
 
 '''
 
@@ -64,6 +64,6 @@ python sample_t2i.py --infer-mode fa \
     --no-enhance \
     --image-path "/workspace/dataset/AD_150/images/002_S_1280_2014-03-14_15_13_20.0_150.png" \
     --dit-weight log_EXP/001-dit_256_2/checkpoints/e0500.pt \
-    --lora-ckpt log_EXP/002-lora_brdit_ema_rank64/checkpoints/final.pt/adapter_model.safetensors \
+    --lora-ckpt log_EXP/002-lora_adgdit_ema_rank64/checkpoints/final.pt/adapter_model.safetensors \
     --load-key module
 '''

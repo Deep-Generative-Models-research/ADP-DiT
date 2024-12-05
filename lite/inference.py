@@ -1,6 +1,6 @@
 import random
 import torch
-from diffusers import HunyuanDiTPipeline
+from diffusers import ADGDiTPipeline
 from transformers import T5EncoderModel
 import time
 from loguru import logger
@@ -8,7 +8,7 @@ import gc
 import sys
 
 NEGATIVE_PROMPT = ''
-    
+
 TEXT_ENCODER_CONF = {
     "negative_prompt": NEGATIVE_PROMPT,
     "prompt_embeds": None,
@@ -25,7 +25,7 @@ def flush():
 
 
 class End2End(object):
-    def __init__(self, model_id="Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled"):
+    def __init__(self, model_id="Tencent-ADG/ADGDiT-v1.1-Diffusers-Distilled"):
         self.model_id = model_id
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         # ========================================================================
@@ -35,14 +35,14 @@ class End2End(object):
         logger.info("==================================================")
 
     def load_pipeline(self):
-        self.pipeline= HunyuanDiTPipeline.from_pretrained(
+        self.pipeline= ADGDiTPipeline.from_pretrained(
             self.model_id,
             text_encoder=None,
             text_encoder_2=None,
             torch_dtype=torch.float16,
         ).to(self.device)
 
-    
+
     def get_text_emb(self, prompts):
         with torch.no_grad():
             text_encoder_2 = T5EncoderModel.from_pretrained(
@@ -51,8 +51,8 @@ class End2End(object):
                 load_in_8bit=True,
                 device_map="auto",
             )
-            encoder_pipeline = HunyuanDiTPipeline.from_pretrained(
-                self.model_id, 
+            encoder_pipeline = ADGDiTPipeline.from_pretrained(
+                self.model_id,
                 text_encoder_2=text_encoder_2,
                 transformer=None,
                 vae=None,
@@ -107,7 +107,7 @@ class End2End(object):
 
 
         # ========================================================================
-        
+
         logger.debug(f"""
                        prompt: {user_prompt}
               enhanced prompt: {enhanced_prompt}
@@ -118,8 +118,8 @@ class End2End(object):
                   infer_steps: {infer_steps}
         """)
 
-        
-        # get text embeding 
+
+        # get text embeding
         flush()
         prompt_emb1, prompt_emb2 = self.get_text_emb(prompt)
         prompt_embeds, negative_prompt_embeds, prompt_attention_mask, negative_prompt_attention_mask = prompt_emb1
@@ -140,9 +140,9 @@ class End2End(object):
             num_images_per_prompt=batch_size,
             guidance_scale=guidance_scale,
             num_inference_steps=infer_steps,
-            generator=generator, 
+            generator=generator,
         ).images[0]
-        
+
         return {
             'images': samples,
             'seed': seed,
@@ -153,10 +153,10 @@ if __name__ == "__main__":
 
     if len(sys.argv) != 5:
         print("Usage: python lite/inference.py ${model_id} ${prompt} ${infer_steps} ${guidance_scale}")
-        print("model_id: Choose a diffusers repository from the official Hugging Face repository https://huggingface.co/Tencent-Hunyuan, "
-              "such as Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers, "
-              "Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled, "
-              "Tencent-Hunyuan/HunyuanDiT-Diffusers, or Tencent-Hunyuan/HunyuanDiT-Diffusers-Distilled.")
+        print("model_id: Choose a diffusers repository from the official Hugging Face repository https://huggingface.co/Tencent-ADG, "
+              "such as Tencent-ADG/ADGDiT-v1.1-Diffusers, "
+              "Tencent-ADG/ADGDiT-v1.1-Diffusers-Distilled, "
+              "Tencent-ADG/ADGDiT-Diffusers, or Tencent-ADG/ADGDiT-Diffusers-Distilled.")
         print("prompt: the input prompt")
         print("infer_steps: infer_steps")
         print("guidance_scale: guidance_scale")

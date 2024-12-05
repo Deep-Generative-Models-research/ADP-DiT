@@ -1,16 +1,16 @@
 import torch
 import os
-from brdit.config import get_args
-from brdit.modules.models import HUNYUAN_DIT_MODELS
+from adgdit.config import get_args
+from adgdit.modules.models import ADG_DIT_MODELS
 
-from brdit.inference import _to_tuple
+from adgdit.inference import _to_tuple
 
 args = get_args()
 
 image_size = _to_tuple(args.image_size)
 latent_size = (image_size[0] // 8, image_size[1] // 8)
 
-model = HUNYUAN_DIT_MODELS[args.model](args,
+model = ADG_DIT_MODELS[args.model](args,
                                        input_size=latent_size,
                                        log_fn=print,
                                         )

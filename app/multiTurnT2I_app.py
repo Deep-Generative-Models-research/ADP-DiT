@@ -120,7 +120,7 @@ def pipeline(input_text, state, infer_steps, seed, image_size):
         intention_draw = True
     else:
         intention_draw = False
-    
+
     print(f"response:{response}")
     print("-" * 80)
     print(f"history_messages:{history_messages}")
@@ -162,8 +162,8 @@ def reset_last(state):
     return [conversation, history], conversation
 
 if __name__ == '__main__':
-    
-    # Initialize dialoggen and HunyuanDiT model
+
+    # Initialize dialoggen and ADGDiT model
     args, gen, enhancer = inferencer()
     strings = get_strings(args.lang)
 
@@ -197,12 +197,12 @@ if __name__ == '__main__':
             你可以参照[DialogGen](https://arxiv.org/abs/2403.08857)，通过简单的交互式语句来进行历史图片的修改，例如：主体编辑、增加主体、删除主体、背景更换、风格转换、镜头转换、图像合并。
 
             (You can modify historical images through simple interactive statements referred to [DialogGen](https://arxiv.org/abs/2403.08857), such as: enity edit, add object, remove object, change background, change style, change lens, and combine images. )
-            
+
             例如，主体编辑 (For example, enity edit) :
             ```none
             Round1: 画一个木制的鸟
             (Round1: draw a wooden bird)
-            
+
             Round2: 变成玻璃的
             (Round2: turn into glass)
             ```
@@ -214,7 +214,7 @@ if __name__ == '__main__':
         with gr.Row():
             with gr.Column(scale=1, min_width=1000):
                 with gr.Row():
-                    chatbot = gr.Chatbot(elem_id="chatbot", label="DialogGen&HunyuanDiT")
+                    chatbot = gr.Chatbot(elem_id="chatbot", label="DialogGen&ADGDiT")
                 with gr.Row():
                     infer_steps = gr.Slider(
                         label='采样步数(sampling steps)', minimum=1, maximum=200, value=100, step=1,
@@ -254,7 +254,7 @@ if __name__ == '__main__':
                     ], [text_input],
                     label=strings['examples']
                     )
-                gr.Markdown('''<p style="font-size: 20px; color: #888;">powered by <a href="https://github.com/Centaurusalpha/DialogGen" target="_blank">DialogGen</a> and <a href="https://github.com/Tencent/HunyuanDiT" target="_blank">HunyuanDiT</a></p>''')
+                gr.Markdown('''<p style="font-size: 20px; color: #888;">powered by <a href="https://github.com/Centaurusalpha/DialogGen" target="_blank">DialogGen</a> and <a href="https://github.com/Tencent/ADGDiT" target="_blank">ADGDiT</a></p>''')
 
 
         text_input.submit(pipeline, [text_input, gr_state, infer_steps, seed, size_dropdown], [gr_state, chatbot])

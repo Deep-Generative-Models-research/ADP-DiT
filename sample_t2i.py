@@ -1,7 +1,7 @@
 from pathlib import Path
 from loguru import logger
-from brdit.config import get_args
-from brdit.inference import End2End
+from adgdit.config import get_args
+from adgdit.inference import End2End
 
 def inferencer():
     args = get_args()
@@ -55,6 +55,6 @@ if __name__ == "__main__":
         while save_path.exists():
             idx += 1
             save_path = save_dir / f"image_cfg{cfg_scale}_steps{infer_steps}_idx{idx}.png"
-        
+
         pil_img.save(save_path)
         logger.info(f"Saved image to {save_path}")

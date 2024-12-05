@@ -16,7 +16,7 @@ square,Square(1024x1024)
 landscape,Landscape(1280x768)
 portrait,Portrait(768x1280)
 accordion,Advanced Options
-generated image,HunYuanDiT Generated Image
+generated image,ADGDiT Generated Image
 examples,More Examples
-title,Hunyuan-DiT
+title,ADG-DiT
 desc,A Powerful Multi-Resolution Diffusion Transformer with Fine-Grained Chinese Understanding

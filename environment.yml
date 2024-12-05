@@ -1,4 +1,4 @@
-name: HunyuanDiT
+name: ADGDiT
 channels:
   - pytorch
   - nvidia
