@@ -1,23 +1,23 @@
-export CUDA_VISIBLE_DEVICES=2
-export MASTER_PORT=29503  # 사용할 포트 지정
-export PYTHONPATH=/mnt/ssd/braintumor-DiT/IndexKits:$PYTHONPATH
+export CUDA_VISIBLE_DEVICES=0
+export MASTER_PORT=29500  # 사용할 포트 지정
+export PYTHONPATH=/workspace/IndexKits:$PYTHONPATH
 # Task and file settings
 task_flag="dit_g_2"                                  # the task flag is used to identify folders.
-index_file=dataset/AD/jsons/AD.json                    # index file for dataloader
+index_file=dataset/AD2/jsons/AD2.json                    # index file for dataloader
 # resume_module_root=log_EXP/002-dit_XL_2/checkpoints/final.pt/mp_rank_00_model_states.pt # checkpoint root for model resume
 # resume_ema_root=log_EXP/002-dit_XL_2/checkpoints/final.pt/zero_pp_rank_0_mp_rank_00_optim_states.pt     # checkpoint root for ema resume (필요한 경우 설정)
-results_dir=./log_EXP                                  # save root for results
+results_dir=./log_EXP_dit_g_2_AD2                                  # save root for results
 
 # Training hyperparameters
-batch_size=64                                         # training batch size
+batch_size=64                                        # training batch size
 image_size=256                                         # training image resolution
-grad_accu_steps=1                                      # gradient accumulation
+grad_accu_steps=2                                     # gradient accumulation
 warmup_num_steps=0                                     # warm-up steps
 lr=0.0001                                              # learning rate
 ckpt_every=9999999                                     # create a ckpt every a few steps.
 ckpt_latest_every=9999999                              # create a ckpt named `latest.pt` every a few steps.
 ckpt_every_n_epoch=100                                 # create a ckpt every a few epochs.
-epochs=10000                                          # additional training epochs
+epochs=5000                                          # additional training epochs
 
 
 sh $(dirname "$0")/run_g.sh \
