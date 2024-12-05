@@ -468,35 +468,39 @@ def main(args):
             log_steps += 1
             train_steps += 1
 
-            if rank == 0 and train_steps % args.log_every == 0:
-                # Measure training speed:
+            if train_steps % args.log_every == 0:
+                # Ensure synchronization across GPUs before timing/logging
                 torch.cuda.synchronize()
+
+                # Calculate elapsed time for steps
                 end_time = time.time()
                 steps_per_sec = log_steps / (end_time - start_time)
 
-                # Reduce loss history over all processes:
-                avg_loss = torch.tensor(running_loss / log_steps, device=device)
-                dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
-                avg_loss = avg_loss.item() / world_size
+                # Compute the average loss across all processes
+                avg_loss_tensor = torch.tensor(running_loss / log_steps, device=device)
+                dist.all_reduce(avg_loss_tensor, op=dist.ReduceOp.SUM)
+                avg_loss = avg_loss_tensor.item() / world_size
 
-                # get lr from deepspeed fused optimizer
-                current_lr = opt.param_groups[0]['lr']
-                samples_per_sec = int(steps_per_sec * batch_size * world_size)
+                if rank == 0:  # Only log on the main process
+                    # Retrieve current learning rate
+                    current_lr = opt.param_groups[0]['lr']
+                    samples_per_sec = int(steps_per_sec * batch_size * world_size)
 
-                # TensorBoard 기록
-                writer.add_scalar('Loss/train', avg_loss, train_steps)
-                writer.add_scalar('Learning Rate', current_lr, train_steps)
-                writer.add_scalar('Steps/Sec', steps_per_sec, train_steps)
-                writer.add_scalar('Samples/Sec', samples_per_sec, train_steps)
+                    # Log metrics to TensorBoard
+                    writer.add_scalar('Loss/train', avg_loss, train_steps)
+                    writer.add_scalar('Learning Rate', current_lr, train_steps)
+                    writer.add_scalar('Steps/Sec', steps_per_sec, train_steps)
+                    writer.add_scalar('Samples/Sec', samples_per_sec, train_steps)
 
-                logger.info(f"(step={train_steps:07d}) " +
-                            (f"(update_step={train_steps // args.grad_accu_steps:07d}) " if args.grad_accu_steps > 1 else "") +
-                            f"Train Loss: {avg_loss:.4f}, "
-                            f"Lr: {current_lr:.6g}, "
-                            f"Steps/Sec: {steps_per_sec:.2f}, "
-                            f"Samples/Sec: {samples_per_sec:d}")
+                    # Log details to the console
+                    logger.info(f"(step={train_steps:07d}) " +
+                                (f"(update_step={train_steps // args.grad_accu_steps:07d}) " if args.grad_accu_steps > 1 else "") +
+                                f"Train Loss: {avg_loss:.4f}, "
+                                f"Lr: {current_lr:.6g}, "
+                                f"Steps/Sec: {steps_per_sec:.2f}, "
+                                f"Samples/Sec: {samples_per_sec:d}")
 
-                # Reset monitoring variables:
+                # Reset monitoring variables for the next logging period
                 running_loss = 0
                 log_steps = 0
                 start_time = time.time()
