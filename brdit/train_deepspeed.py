@@ -14,7 +14,7 @@ import torch.distributed as dist
 from diffusers.models import AutoencoderKL
 from peft import LoraConfig, get_peft_model
 from torch.utils.data import DataLoader
-from transformers import BertModel, BertTokenizer, logging as tf_logging
+from transformers import CLIPTextModel, CLIPTokenizer, BertModel, BertTokenizer, logging as tf_logging
 from torch.utils.tensorboard import SummaryWriter
 
 from IndexKits.index_kits import ResolutionGroup
@@ -289,10 +289,13 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(VAE_EMA_PATH)
     # Setup BERT text encoder
     logger.info(f"    Loading Bert text encoder from {TEXT_ENCODER}")
-    text_encoder = BertModel.from_pretrained(TEXT_ENCODER, False, revision=None)
+    # text_encoder = BertModel.from_pretrained(TEXT_ENCODER, False, revision=None)
+    text_encoder = CLIPTextModel.from_pretrained(TEXT_ENCODER, revision=None)
+
     # Setup BERT tokenizer:
     logger.info(f"    Loading Bert tokenizer from {TOKENIZER}")
-    tokenizer = BertTokenizer.from_pretrained(TOKENIZER)
+    # tokenizer = BertTokenizer.from_pretrained(TOKENIZER)
+    tokenizer = CLIPTokenizer.from_pretrained(TOKENIZER)
 
     if args.extra_fp16:
         logger.info(f"    Using fp16 for extra modules: vae, text_encoder")

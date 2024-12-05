@@ -29,7 +29,7 @@ def get_args(default_args=None):
     parser.add_argument("--extra-fp16", action="store_true", help="Use extra fp16 for vae and text_encoder.")
 
     # HunYuan-DiT
-    parser.add_argument("--model", type=str, choices=list(HUNYUAN_DIT_CONFIG.keys()), default='DiT-256/2')
+    parser.add_argument("--model", type=str, choices=list(HUNYUAN_DIT_CONFIG.keys()), default='DiT-g/2')
     parser.add_argument("--image-size", type=int, nargs='+', default=[256, 256],
                         help='Image size (h, w). If a single value is provided, the image will be treated to '
                              '(value, value).')
@@ -115,7 +115,7 @@ def get_args(default_args=None):
     parser.add_argument('--target-ratios', type=str, nargs='+', default=None,
                         help="Target ratios for multi-resolution training.")
     parser.add_argument("--cfg-scale", type=float, default=6.0, help="Guidance scale for classifier-free.")
-    parser.add_argument("--negative", type=str, default="low quality, blurry, distorted anatomy, extra artifacts, non-medical objects, unrelated symbols, human faces, missing brain regions, incorrect contrast, cartoonish, noise, grainy patches", help="Negative prompt.")
+    parser.add_argument("--negative", type=str, default="low quality, blurry, distorted anatomy, extra artifacts, non-medical objects, unrelated symbols, missing brain regions, incorrect contrast, cartoonish, noise, grainy patches", help="Negative prompt.")
 
     # Acceleration
     parser.add_argument("--infer-mode", type=str, choices=["fa", "torch", "trt"], default="fa",

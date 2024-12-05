@@ -1,5 +1,5 @@
-export CUDA_VISIBLE_DEVICES=1
-export MASTER_PORT=29502  # 사용할 포트 지정
+export CUDA_VISIBLE_DEVICES=2
+export MASTER_PORT=29503  # 사용할 포트 지정
 export PYTHONPATH=/mnt/ssd/braintumor-DiT/IndexKits:$PYTHONPATH
 # Task and file settings
 task_flag="dit_g_2"                                  # the task flag is used to identify folders.

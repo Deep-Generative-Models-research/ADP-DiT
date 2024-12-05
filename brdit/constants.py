@@ -29,8 +29,12 @@ TRT_MAX_HEIGHT = 1280
 # =======================================================
 
 VAE_EMA_PATH = "ckpts/t2i/sdxl-vae-fp16-fix"
-TOKENIZER = "ckpts/t2i/tokenizer"
-TEXT_ENCODER = 'ckpts/t2i/clip_text_encoder'
+# bert 모델
+# TOKENIZER = "ckpts/t2i/tokenizer"
+# TEXT_ENCODER = 'ckpts/t2i/clip_text_encoder'
+# clip 모델
+TOKENIZER = "ckpts/dialoggen/openai/clip-vit-large-patch14-336"
+TEXT_ENCODER = 'ckpts/dialoggen/openai/clip-vit-large-patch14-336'
 
 SAMPLER_FACTORY = {
     'ddpm': {

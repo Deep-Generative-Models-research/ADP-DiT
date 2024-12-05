@@ -223,6 +223,8 @@ class HunYuanDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
 
         # Attention pooling
         pooler_out_dim = 1024
+        # clip모델로 돌릴경우 주석 x / bert 모델로 돌릴경우 주석 o
+        self.text_states_dim = 768  # Update to match input tensor if fixed
         self.pooler = AttentionPool(self.text_len, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
         # self.pooler = AttentionPool(77, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
 
