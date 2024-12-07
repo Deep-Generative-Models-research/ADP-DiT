@@ -213,18 +213,10 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
             log_fn(f"    Enable Flash Attention.")
         qk_norm = args.qk_norm  # See http://arxiv.org/abs/2302.05442 for details.
 
-        # # Metadata embedding
-        # self.metadata_dim = args.metadata_dim  # Example: number of metadata fields
-        # self.metadata_embedder = nn.Sequential(
-        #     nn.Linear(self.metadata_dim, hidden_size * 4),
-        #     FP32_SiLU(),
-        #     nn.Linear(hidden_size * 4, hidden_size),
-        # )
-
         # Attention pooling
         pooler_out_dim = 1024
         # clip모델로 돌릴경우 주석 x / bert 모델로 돌릴경우 주석 o
-        self.text_states_dim = 768  # Update to match input tensor if fixed
+        # self.text_states_dim = 768  # Update to match input tensor if fixed
         self.pooler = AttentionPool(self.text_len, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
         # self.pooler = AttentionPool(77, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
 
@@ -254,7 +246,7 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
         num_patches = self.x_embedder.num_patches
         log_fn(f"    Number of tokens: {num_patches}")
 
-        # Brain Tumor Blocks
+        # ADG Blocks
         self.blocks = nn.ModuleList([
             ADGDiTBlock(hidden_size=hidden_size,
                             c_emb_size=hidden_size,
@@ -533,7 +525,6 @@ ADG_DIT_CONFIG = {
 
 def DiT_g_2(args, **kwargs):
     return ADGDiT(args, depth=40, hidden_size=1408, patch_size=2, num_heads=16, mlp_ratio=4.3637, **kwargs)
-
 
 def DiT_XL_2(args, **kwargs):
     return ADGDiT(args, depth=28, hidden_size=1152, patch_size=2, num_heads=16, **kwargs)

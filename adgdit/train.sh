@@ -1,12 +1,12 @@
-export CUDA_VISIBLE_DEVICES=0
-export MASTER_PORT=29500  # 사용할 포트 지정
-export PYTHONPATH=/workspace/IndexKits:$PYTHONPATH
+export CUDA_VISIBLE_DEVICES=1
+export MASTER_PORT=29501  # 사용할 포트 지정
+export PYTHONPATH=/mnt/ssd/ADG-DiT/IndexKits:$PYTHONPATH
 # Task and file settings
-task_flag="dit_g_2"                                  # the task flag is used to identify folders.
-index_file=dataset/AD2/jsons/AD2.json                    # index file for dataloader
+task_flag="dit_XL_2"                                  # the task flag is used to identify folders.
+index_file=dataset/AD2_meta/jsons/AD2_meta.json                    # index file for dataloader
 # resume_module_root=log_EXP/002-dit_XL_2/checkpoints/final.pt/mp_rank_00_model_states.pt # checkpoint root for model resume
 # resume_ema_root=log_EXP/002-dit_XL_2/checkpoints/final.pt/zero_pp_rank_0_mp_rank_00_optim_states.pt     # checkpoint root for ema resume (필요한 경우 설정)
-results_dir=./log_EXP_dit_g_2_AD2                                  # save root for results
+results_dir=./log_EXP_dit_XL_2_AD2_meta                                  # save root for results
 
 # Training hyperparameters
 batch_size=64                                        # training batch size
@@ -17,7 +17,7 @@ lr=0.0001                                              # learning rate
 ckpt_every=9999999                                     # create a ckpt every a few steps.
 ckpt_latest_every=9999999                              # create a ckpt named `latest.pt` every a few steps.
 ckpt_every_n_epoch=100                                 # create a ckpt every a few epochs.
-epochs=5000                                          # additional training epochs
+epochs=2000                                          # additional training epochs
 
 
 sh $(dirname "$0")/run_g.sh \
@@ -33,8 +33,8 @@ sh $(dirname "$0")/run_g.sh \
     --global-seed 999 \
     --grad-accu-steps ${grad_accu_steps} \
     --lr_schedule COSINE_ANNEALING_RESTARTS \
-    --t_max 1000 \
-    --eta_min 1e-6 \
+    --t_max 200 \
+    --eta_min 1e-5 \
     --t_mult 2.0 \
     --results-dir ${results_dir} \
     --epochs ${epochs} \

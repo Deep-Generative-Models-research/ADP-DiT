@@ -5,6 +5,7 @@ from adgdit.modules.models import ADG_DIT_MODELS
 
 from adgdit.inference import _to_tuple
 
+model_path = "/mnt/ssd/ADG-DiT/ADG-DiT_XL_2_ADoldversion/003-dit_XL_2/checkpoints/e4800.pt/zero_pp_rank_0_mp_rank_00_optim_states.pt"  # Replace with your model path
 args = get_args()
 
 image_size = _to_tuple(args.image_size)
@@ -14,7 +15,8 @@ model = ADG_DIT_MODELS[args.model](args,
                                        input_size=latent_size,
                                        log_fn=print,
                                         )
-model_path = os.path.join(args.model_root, 't2i', 'model', f"pytorch_model_{args.load_key}.pt")
+
+# model_path = os.path.join(args.model_root, 't2i', 'model', f"pytorch_model_{args.load_key}.pt")
 state_dict = torch.load(model_path, map_location=lambda storage, loc: storage)
 
 print(f"Loading model from {model_path}")

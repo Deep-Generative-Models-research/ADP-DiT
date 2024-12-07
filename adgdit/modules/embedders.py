@@ -109,70 +109,29 @@ class TimestepEmbedder(nn.Module):
         t_emb = self.mlp(t_freq)
         return t_emb
 
-
-# class TimestepEmbedderWithMetadata(nn.Module):
-#     """
-#     Embeds scalar timesteps and metadata into vector representations.
-#     """
-#     def __init__(self, hidden_size, frequency_embedding_size=256, metadata_dim=10, out_size=None):
+# class TimestepEmbedder(nn.Module):
+#     def __init__(self, hidden_size, frequency_embedding_size=256, out_size=None, metric_dim=5):
 #         super().__init__()
 #         if out_size is None:
 #             out_size = hidden_size
-
-#         # Timestep embedding
-#         self.mlp_t = nn.Sequential(
+#         self.mlp = nn.Sequential(
 #             nn.Linear(frequency_embedding_size, hidden_size, bias=True),
 #             nn.SiLU(),
 #             nn.Linear(hidden_size, out_size, bias=True),
 #         )
 #         self.frequency_embedding_size = frequency_embedding_size
+#         self.metric_attention = nn.MultiheadAttention(embed_dim=hidden_size, num_heads=1, batch_first=True)
+#         self.metric_proj = nn.Linear(metric_dim, hidden_size)
 
-#         # Metadata embedding
-#         self.mlp_metadata = nn.Sequential(
-#             nn.Linear(metadata_dim, hidden_size, bias=True),
-#             nn.SiLU(),
-#             nn.Linear(hidden_size, out_size, bias=True),
-#         )
-
-#         # Projection layer to combine timestep and metadata embeddings
-#         self.proj = nn.Sequential(
-#             nn.Linear(out_size * 2, out_size),
-#             nn.SiLU(),
-#             nn.Linear(out_size, out_size, bias=True),
-#         )
-
-#     def forward(self, t, metadata_csv_path=None, metadata_fields=None):
-#         # Embed timestep
-#         t_freq = timestep_embedding(t, self.frequency_embedding_size).type(self.mlp_t[0].weight.dtype)
-#         t_emb = self.mlp_t(t_freq)
-
-#         # Process and embed metadata
-#         if metadata_csv_path and metadata_fields:
-#             metadata = process_metadata(metadata_csv_path, metadata_fields)  # Call external function
-#             metadata_emb = self.mlp_metadata(metadata)
-#         else:
-#             raise ValueError("metadata_csv_path and metadata_fields must be provided")
-
-#         # Combine embeddings
-#         combined_emb = torch.cat([t_emb, metadata_emb], dim=-1)
-#         combined_emb = self.proj(combined_emb)
-
-#         return combined_emb
-
-
-# class MetadataEmbedder(nn.Module):
-#     """Embeds metadata directly."""
-#     def __init__(self, hidden_size, metadata_dim=10, out_size=None):
-#         super().__init__()
-#         if out_size is None:
-#             out_size = hidden_size
-#         self.mlp_metadata = nn.Sequential(
-#             nn.Linear(metadata_dim, hidden_size, bias=True),
-#             nn.SiLU(),
-#             nn.Linear(hidden_size, out_size, bias=True),
-#         )
-
-#     def forward(self, metadata_csv_path, metadata_fields):
-#         # Process metadata CSV
-#         metadata = process_metadata(metadata_csv_path, metadata_fields)  # Call external function
-#         return self.mlp_metadata(metadata)
+#     def forward(self, t, memory_metrics=None):
+#         t_freq = timestep_embedding(t, self.frequency_embedding_size).type(self.mlp[0].weight.dtype)
+#         t_emb = self.mlp(t_freq)  # Shape: [B, H]
+        
+#         if memory_metrics is not None:
+#             memory_metrics = self.metric_proj(memory_metrics)  # Shape: [B, 5] ¡æ [B, H]
+#             t_emb = t_emb.unsqueeze(1)  # Shape: [B, 1, H]
+#             memory_metrics = memory_metrics.unsqueeze(1)  # Shape: [B, 1, H]
+#             # Attention over Time Embedding and Memory Metrics
+#             t_emb, _ = self.metric_attention(t_emb, memory_metrics, memory_metrics)  # Shape: [B, 1, H]
+#             t_emb = t_emb.squeeze(1)  # Remove the sequence dimension
+#         return t_emb

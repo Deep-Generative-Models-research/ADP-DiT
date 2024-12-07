@@ -146,7 +146,16 @@ log_EXP/
 log_EXP
 log_EXP_gpu1/
 log_EXP_gpu2/
+log_EXP_AD2/
 log_EXP_dit_g_2_AD2/
 results_prompt_Strength1/
 results_prompt_Strength2/
 results_prompt_Strength3/
+DiT-XL_2_AD2_meta_lora/
+log_EXP_dit_XL_2_AD2/
+ADG-DiT_G_2_ADoldversion/
+ADG-DiT_XL_2_ADoldversion/
+eval/
+log_EXP_dit_g_2_AD2_meta/
+log_EXP_dit_XL_2_AD2_meta/
+adgdit/ds_config.py

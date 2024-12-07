@@ -289,13 +289,13 @@ def main(args):
     vae = AutoencoderKL.from_pretrained(VAE_EMA_PATH)
     # Setup BERT text encoder
     logger.info(f"    Loading Bert text encoder from {TEXT_ENCODER}")
-    # text_encoder = BertModel.from_pretrained(TEXT_ENCODER, False, revision=None)
-    text_encoder = CLIPTextModel.from_pretrained(TEXT_ENCODER, revision=None)
+    text_encoder = BertModel.from_pretrained(TEXT_ENCODER, False, revision=None)
+    # text_encoder = CLIPTextModel.from_pretrained(TEXT_ENCODER, revision=None)
 
     # Setup BERT tokenizer:
     logger.info(f"    Loading Bert tokenizer from {TOKENIZER}")
-    # tokenizer = BertTokenizer.from_pretrained(TOKENIZER)
-    tokenizer = CLIPTokenizer.from_pretrained(TOKENIZER)
+    tokenizer = BertTokenizer.from_pretrained(TOKENIZER)
+    # tokenizer = CLIPTokenizer.from_pretrained(TOKENIZER)
 
     if args.extra_fp16:
         logger.info(f"    Using fp16 for extra modules: vae, text_encoder")
@@ -468,7 +468,7 @@ def main(args):
             log_steps += 1
             train_steps += 1
 
-            if train_steps % args.log_every == 0:
+            if  rank == 0 and train_steps % args.log_every == 0:
                 # Ensure synchronization across GPUs before timing/logging
                 torch.cuda.synchronize()
 

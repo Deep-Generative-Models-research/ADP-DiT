@@ -12,46 +12,10 @@ class AttentionPool(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim)
         self.c_proj = nn.Linear(embed_dim, output_dim or embed_dim)
         self.num_heads = num_heads
-        # Debugging: log positional embedding size
-        print(f"Positional embedding size: {self.positional_embedding.size()}")
 
-    # def forward(self, x):
-    #     x = x.permute(1, 0, 2)  # NLC -> LNC
-    #     x = torch.cat([x.mean(dim=0, keepdim=True), x], dim=0)  # (L+1)NC
-    #     # print("!!!!!!!!!!!")
-    #     # print(x.size())
-    #     # print((self.positional_embedding[:, None, :].to(x.dtype)).size())
-    #     x = x + self.positional_embedding[:, None, :].to(x.dtype)  # (L+1)NC
-    #     x, _ = F.multi_head_attention_forward(
-    #         query=x[:1], key=x, value=x,
-    #         embed_dim_to_check=x.shape[-1],
-    #         num_heads=self.num_heads,
-    #         q_proj_weight=self.q_proj.weight,
-    #         k_proj_weight=self.k_proj.weight,
-    #         v_proj_weight=self.v_proj.weight,
-    #         in_proj_weight=None,
-    #         in_proj_bias=torch.cat([self.q_proj.bias, self.k_proj.bias, self.v_proj.bias]),
-    #         bias_k=None,
-    #         bias_v=None,
-    #         add_zero_attn=False,
-    #         dropout_p=0,
-    #         out_proj_weight=self.c_proj.weight,
-    #         out_proj_bias=self.c_proj.bias,
-    #         use_separate_proj_weight=True,
-    #         training=self.training,
-    #         need_weights=False
-    #     )
-    #     return x.squeeze(0)
     def forward(self, x):
         x = x.permute(1, 0, 2)  # NLC -> LNC
         x = torch.cat([x.mean(dim=0, keepdim=True), x], dim=0)  # (L+1)NC
-
-        # Dynamically resize positional embedding
-        if self.positional_embedding.shape[1] != x.shape[-1]:
-            self.positional_embedding = nn.Parameter(
-                self.positional_embedding[:, :x.shape[-1]]
-            )
-
         x = x + self.positional_embedding[:, None, :].to(x.dtype)  # (L+1)NC
         x, _ = F.multi_head_attention_forward(
             query=x[:1], key=x, value=x,

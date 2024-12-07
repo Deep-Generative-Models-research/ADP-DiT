@@ -1,9 +1,10 @@
 import random
 import time
 from pathlib import Path
-
+import torch.nn.functional as F  # 추가
 import numpy as np
 import torch
+from safetensors import safe_open
 
 # For reproducibility
 # torch.backends.cudnn.benchmark = False
@@ -235,28 +236,10 @@ class End2End(object):
 
             lora_ckpt = args.lora_ckpt
             if lora_ckpt is not None and lora_ckpt != "":
-                lora_ckpt_path = Path(lora_ckpt)
+                logger.info(f"Loading Lora checkpoint {lora_ckpt}...")
 
-                # 디버깅: 경로 출력
-                logger.debug(f"Provided LoRA checkpoint path: {lora_ckpt_path}")
-
-                # 경로가 디렉토리인지 파일인지 확인
-                if lora_ckpt_path.is_dir():
-                    safetensor_files = list(lora_ckpt_path.glob("*.safetensors"))
-                    if len(safetensor_files) == 0:
-                        raise ValueError(f"No .safetensors file found in directory: {lora_ckpt_path}")
-                    elif len(safetensor_files) > 1:
-                        logger.warning(f"Multiple .safetensors files found. Using the first one: {safetensor_files[0]}")
-                    lora_ckpt_path = safetensor_files[0]
-                elif not lora_ckpt_path.is_file():
-                    raise ValueError(f"Invalid LoRA checkpoint path: {lora_ckpt_path}. Must be a directory or a .safetensors file.")
-
-                logger.info(f"Loading LoRA checkpoint from: {lora_ckpt_path}")
-                self.model.load_adapter(str(lora_ckpt_path))
+                self.model.load_adapter(lora_ckpt)
                 self.model.merge_and_unload()
-
-
-
 
             self.model.eval()
             logger.info(f"Loading torch model finished")
@@ -294,6 +277,7 @@ class End2End(object):
         logger.info(f"                Model is ready.                  ")
         logger.info("==================================================")
 
+
     def load_torch_weights(self):
         load_key = self.args.load_key
         if self.args.dit_weight is not None:
@@ -314,10 +298,10 @@ class End2End(object):
                     bare_model = False
                 else:
                     raise ValueError(f"Invalid model path: {dit_weight} with unrecognized weight format: "
-                                     f"{list(map(str, files))}. When given a directory as --dit-weight, only "
-                                     f"`pytorch_model_*.pt`(provided by ADGDiT official) and "
-                                     f"`*_model_states.pt`(saved by deepspeed) can be parsed. If you want to load a "
-                                     f"specific weight file, please provide the full path to the file.")
+                                    f"{list(map(str, files))}. When given a directory as --dit-weight, only "
+                                    f"`pytorch_model_*.pt`(provided by HunyuanDiT official) and "
+                                    f"`*_model_states.pt`(saved by deepspeed) can be parsed. If you want to load a "
+                                    f"specific weight file, please provide the full path to the file.")
             elif dit_weight.is_file():
                 model_path = dit_weight
                 bare_model = 'unknown'
@@ -329,12 +313,22 @@ class End2End(object):
             bare_model = True
 
         if not model_path.exists():
-            raise ValueError(f"model_path not exists: {model_path}")
-        logger.info(f"Loading torch model {model_path}...")
+            raise ValueError(f"Model path does not exist: {model_path}")
+            
+        logger.info(f"Loading model weights from {model_path}...")
+
+        # Check for safetensors file and load it
         if model_path.suffix == '.safetensors':
-            raise NotImplementedError(f"Loading safetensors is not supported yet.")
+            logger.info(f"Loading .safetensors file: {model_path}")
+            state_dict = {}
+            with safe_open(str(model_path), framework="pt", device="cpu") as f:
+                for key in f.keys():
+                    state_dict[key] = f.get_tensor(key)
+            logger.info(f"Successfully loaded {len(state_dict)} tensors from {model_path}")
         else:
-            state_dict = torch.load(model_path, map_location=lambda storage, loc: storage)
+            # Assume it's a single weight file in the *.pt format.
+            logger.info(f"Loading torch model {model_path}...")
+            state_dict = torch.load(model_path, map_location='cpu')
 
         if bare_model == 'unknown' and ('ema' in state_dict or 'module' in state_dict):
             bare_model = False
@@ -353,8 +347,8 @@ class End2End(object):
         if 'style_embedder.weight' not in state_dict and hasattr(self.model, 'style_embedder'):
             raise ValueError(f"You might be attempting to load the weights of ADGDiT version >= 1.2. You need "
                              f"to remove `--use-style-cond` and `--size-cond 1024 1024` to adapt to these weights.")
-        self.model.load_state_dict(state_dict, strict=True)
-        # self.model.load_state_dict(state_dict, strict=False)
+        # self.model.load_state_dict(state_dict, strict=True)
+        self.model.load_state_dict(state_dict, strict=False)
 
     def load_sampler(self, sampler=None):
         pipeline, sampler = get_pipeline(self.args,
@@ -400,6 +394,18 @@ class End2End(object):
                 sampler=None,
                 use_style_cond=False,
                 ):
+        # ========================================================================
+        # 🔥 NEW: Handle image_latents if image_path is provided
+        if image_path is not None:
+            logger.info(f"Encoding image from path: {image_path}")
+            image_latents = encode_image(image_path, self.vae, self.device)
+            if image_latents is None:
+                raise ValueError(f"Failed to encode image from path: {image_path}")
+        else:
+            image_latents = None
+        # ========================================================================
+
+        # Arguments: seed
         if seed is None:
             seed = random.randint(0, 1_000_000)
         if not isinstance(seed, int):
@@ -408,14 +414,6 @@ class End2End(object):
 
         if width <= 0 or height <= 0:
             raise ValueError(f"`height` and `width` must be positive integers, got height={height}, width={width}")
-
-        # Process and encode image if provided
-        image_latents = None
-        if image_path:
-            image_latents = encode_image(image_path, self.vae, self.device)
-            if image_latents is None:
-                raise ValueError(f"Failed to encode image: {image_path}")
-
         logger.info(f"Input (height, width) = ({height}, {width})")
         if self.infer_mode in ['fa', 'torch']:
             target_height = int((height // 16) * 16)
@@ -464,14 +462,14 @@ class End2End(object):
         start_time = time.time()
         logger.debug(f"""
                     prompt: {user_prompt}
-                enhanced prompt: {enhanced_prompt}
-                            seed: {seed}
-                    (height, width): {(target_height, target_width)}
-                    negative_prompt: {negative_prompt}
-                        batch_size: {batch_size}
-                    guidance_scale: {guidance_scale}
-                        infer_steps: {infer_steps}
-                    image_meta_size: {size_cond}
+            enhanced prompt: {enhanced_prompt}
+                        seed: {seed}
+            (height, width): {(target_height, target_width)}
+            negative_prompt: {negative_prompt}
+                batch_size: {batch_size}
+            guidance_scale: {guidance_scale}
+                infer_steps: {infer_steps}
+            image_meta_size: {size_cond}
         """)
         reso = f'{target_height}x{target_width}'
         if reso in self.freqs_cis_img:
@@ -491,7 +489,7 @@ class End2End(object):
             num_images_per_prompt=batch_size,
             guidance_scale=guidance_scale,
             num_inference_steps=infer_steps,
-            image_latents=image_latents,  # Pass image latents as a new argument
+            image_latents=image_latents,  # ✅ Pass image latents as a new argument
             image_meta_size=image_meta_size,
             style=style,
             return_dict=False,

@@ -1,42 +1,63 @@
+
 import os
 import pandas as pd
-import shutil
 
-# 경로 설정
-csv_file_path = '/workspace/dataset/AD/csvfile/image_text.csv'
-output_csv_path = '/workspace/dataset/AD/csvfile/image_text_150.csv'
-images_dir = '/workspace/dataset/AD/images'
-output_images_dir = '/workspace/dataset/AD/images_150'
+# File paths
+file_path_1 = "/mnt/ssd/ADG-DiT/dataset/AD2_meta/csvfile/image_text_categorical.csv"
+file_path_2 = "/mnt/ssd/ADG-DiT/dataset/AD2_meta/csvfile/output_file.csv"
 
-# CSV 파일 읽기
-if not os.path.exists(csv_file_path):
-    raise FileNotFoundError(f"CSV 파일이 존재하지 않습니다: {csv_file_path}")
+# Load the CSV files
+df1 = pd.read_csv(file_path_1)
+df2 = pd.read_csv(file_path_2)
 
-# 데이터 로드
-image_text_df = pd.read_csv(csv_file_path)
+# Remove whitespace from image_path
+df1['image_path'] = df1['image_path'].str.strip()
+df2['image_path'] = df2['image_path'].str.strip()
 
-# Z-coordinate 150인 데이터 필터링
-filtered_df = image_text_df[image_text_df['text_en'].str.contains('Z-coordinate 150', na=False)]
+# Get the filename only from image_path
+df1['file_name'] = df1['image_path'].apply(lambda x: os.path.basename(x))
+df2['file_name'] = df2['image_path'].apply(lambda x: os.path.basename(x))
 
-# 필터링된 데이터를 새 CSV 파일로 저장
-os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
-filtered_df.to_csv(output_csv_path, index=False)
-print(f"Filtered CSV 저장 완료: {output_csv_path}")
+# Merge the two dataframes on 'file_name'
+merged_df = pd.merge(df1, df2, on='file_name', how='outer')
 
-# 이미지 복사
-if not os.path.exists(images_dir):
-    raise FileNotFoundError(f"이미지 폴더가 존재하지 않습니다: {images_dir}")
+# Combine the 'text_en' columns from both files
+merged_df['text_en'] = merged_df['text_en_x'].fillna('') + ' ' + merged_df['text_en_y'].fillna('')
 
-os.makedirs(output_images_dir, exist_ok=True)
+# Drop unnecessary columns
+merged_df = merged_df[['image_path_x', 'text_en']].rename(columns={'image_path_x': 'image_path'})
 
-for image_path in filtered_df['image_path']:
-    src_image_path = os.path.join(images_dir, os.path.basename(image_path))
-    dest_image_path = os.path.join(output_images_dir, os.path.basename(image_path))
+# Save the merged CSV
+output_path = "/mnt/ssd/ADG-DiT/dataset/AD2_meta/csvfile/merged_output.csv"
+merged_df.to_csv(output_path, index=False)
 
-    if os.path.exists(src_image_path):
-        shutil.copy2(src_image_path, dest_image_path)
-        print(f"이미지 복사 완료: {src_image_path} -> {dest_image_path}")
-    else:
-        print(f"이미지 파일이 존재하지 않습니다: {src_image_path}")
 
-print(f"모든 작업이 완료되었습니다. 필터링된 이미지가 저장된 폴더: {output_images_dir}")
+# import pandas as pd
+
+# # File paths
+# input_csv_path = '/mnt/ssd/ADG-DiT/dataset/AD2_meta/csvfile/image_text_numeric.csv'
+# output_csv_path = '/mnt/ssd/ADG-DiT/dataset/AD2_meta/csvfile/output_file.csv'
+
+# # Read the CSV file
+# df = pd.read_csv(input_csv_path)
+
+# # Generate the text for Month_to_Visit and Age
+# df['additional_text'] = df.apply(
+#     lambda row: f"{int(row['Age'])} years old, {int(row['Month_to_Visit'])} months from first visit", axis=1
+# )
+
+# # Load the image_text.csv file
+# image_text_path = '/mnt/ssd/ADG-DiT/dataset/AD2_meta/csvfile/output_file.csv'
+# image_text_df = pd.read_csv(image_text_path)
+
+# # Merge the data on the 'image_path' column
+# merged_df = image_text_df.merge(df[['image_path', 'additional_text']], on='image_path', how='left')
+
+# # Prepend the 'additional_text' to the 'text_en' column
+# merged_df['text_en'] = merged_df['additional_text'].fillna('') + ' ' + merged_df['text_en'].fillna('')
+
+# # Drop the 'additional_text' column as it's no longer needed
+# merged_df.drop(columns=['additional_text'], inplace=True)
+
+# # Save the updated CSV file
+# merged_df.to_csv(image_text_path, index=False)
