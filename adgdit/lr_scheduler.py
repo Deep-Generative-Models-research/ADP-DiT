@@ -8,6 +8,8 @@ https://github.com/pytorch/pytorch/blob/v1.1.0/torch/optim/lr_scheduler.py
 import argparse
 from torch.optim import Optimizer
 import math
+import torch
+from torch.optim.lr_scheduler import _LRScheduler
 
 LR_SCHEDULE = 'lr_schedule'
 LR_RANGE_TEST = 'LRRangeTest'
@@ -106,10 +108,13 @@ def add_tuning_arguments(parser):
                        default=WARMUP_LOG_RATE,
                        help='WarmupLR increasing function during warmup')
 
-    # CosineAnnealingRestarts
-    group.add_argument('--t_max', type=int, default=10, help='Maximum iterations for the first cycle.')
-    group.add_argument('--eta_min', type=float, default=1e-5, help='Minimum learning rate during decay.')
-    group.add_argument('--t_mult', type=float, default=1.0, help='Factor to increase cycle duration after each restart.')
+    # CosineAnnealingRestarts-specific settings
+    group.add_argument('--t_max', type=int, default=2000, help='Max iterations for the first cycle.')
+    group.add_argument('--eta_min', type=float, default=1e-5, help='Minimum learning rate.')
+    group.add_argument('--t_mult', type=float, default=1.0, help='Factor to increase cycle duration.')
+    group.add_argument('--warmup_steps', type=int, default=2000, help='Number of warmup steps.')
+    group.add_argument('--max_lr', type=float, default=0.0001, help='Maximum learning rate.')
+    group.add_argument('--min_lr', type=float, default=0.00001, help='Minimum learning rate.')
 
     return parser
 
@@ -774,78 +779,104 @@ class WarmupDecayLR(WarmupLR):
             float(self.total_num_steps - self.last_batch_iteration) /
             float(max(1.0, self.total_num_steps - self.warmup_num_steps)))
 
-class CosineAnnealingRestarts:
-    """
-    Sets the learning rate of each parameter group according to the cosine annealing with restarts schedule.
-    The learning rate decreases following a cosine curve and is restarted periodically.
 
+class CosineAnnealingWarmupRestarts(_LRScheduler):
+    """
+    Implements Cosine Annealing with Warmup and Restarts.
+    
     Args:
         optimizer (Optimizer): Wrapped optimizer.
-        t_max (int): Maximum number of iterations for the first cycle.
-        eta_min (float): Minimum learning rate. Default: 0.
-        last_epoch (int): The index of the last epoch. Default: -1.
-        t_mult (float): Factor to increase cycle duration after each restart. Default: 1.0.
-
-    Example:
-        >>> optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
-        >>> scheduler = CosineAnnealingRestarts(optimizer, t_max=10, eta_min=0.001)
-        >>> for epoch in range(100):
-        >>>     train(...)
-        >>>     scheduler.step()
+        first_cycle_steps (int): Number of steps in the first cycle.
+        cycle_mult (float): Multiplier to increase the cycle duration after each restart. Default: 1.0.
+        max_lr (float): Initial maximum learning rate. Default: 0.1.
+        min_lr (float): Minimum learning rate. Default: 0.001.
+        warmup_steps (int): Number of warmup steps at the start of each cycle. Default: 0.
+        gamma (float): Factor by which max_lr is reduced after each cycle. Default: 1.0.
+        last_epoch (int): Index of the last epoch. Default: -1.
     """
-    def __init__(self, optimizer: Optimizer, t_max: int, eta_min: float = 0, t_mult: float = 1.0, last_epoch: int = -1):
-        if t_max <= 0:
-            raise ValueError(f"Expected positive t_max, got {t_max}")
-        self.optimizer = get_torch_optimizer(optimizer)
-        self.t_max = t_max
-        self.eta_min = eta_min
-        self.t_mult = t_mult
-        self.base_lrs = [group['lr'] for group in self.optimizer.param_groups]
-        self.last_epoch = last_epoch
-        self.current_epoch = 0
+    
+    def __init__(self,
+                 optimizer: torch.optim.Optimizer,
+                 first_cycle_steps: int,
+                 cycle_mult: float = 1.0,
+                 max_lr: float = 0.1,
+                 min_lr: float = 0.001,
+                 warmup_steps: int = 0,
+                 gamma: float = 1.0,
+                 last_epoch: int = -1):
+        assert first_cycle_steps > warmup_steps, "first_cycle_steps must be greater than warmup_steps"
+        self.first_cycle_steps = first_cycle_steps
+        self.cycle_mult = cycle_mult
+        self.base_max_lr = max_lr
+        self.max_lr = max_lr
+        self.min_lr = min_lr
+        self.warmup_steps = warmup_steps
+        self.gamma = gamma
+        
+        self.cur_cycle_steps = first_cycle_steps
         self.cycle = 0
-        self.t_current = t_max
-
-        # Initialize learning rate
-        self.step(last_epoch + 1)
-
+        self.step_in_cycle = last_epoch if last_epoch != -1 else 0
+        
+        super(CosineAnnealingWarmupRestarts, self).__init__(optimizer, last_epoch)
+        
     def get_lr(self):
-        if self.last_epoch == 0 or self.last_epoch == -1:
-            return self.base_lrs
-        cos_out = math.cos(math.pi * self.current_epoch / self.t_current) + 1
-        return [self.eta_min + (base_lr - self.eta_min) * cos_out / 2 for base_lr in self.base_lrs]
+        if self.step_in_cycle < self.warmup_steps:
+            # Linear warmup phase
+            return [
+                self.min_lr + (self.max_lr - self.min_lr) * (self.step_in_cycle / self.warmup_steps)
+                for _ in self.optimizer.param_groups
+            ]
+        else:
+            # Cosine annealing phase
+            cosine_steps = self.step_in_cycle - self.warmup_steps
+            total_cosine_steps = self.cur_cycle_steps - self.warmup_steps
+            return [
+                self.min_lr + (self.max_lr - self.min_lr) *
+                (1 + math.cos(math.pi * cosine_steps / total_cosine_steps)) / 2
+                for _ in self.optimizer.param_groups
+            ]
 
     def step(self, epoch=None):
         if epoch is None:
             epoch = self.last_epoch + 1
-
-        self.last_epoch = epoch
-        self.current_epoch = epoch - self.t_max * self.cycle
-
-        if self.current_epoch >= self.t_current:
+        
+        if epoch > 0 and (self.step_in_cycle + 1) >= self.cur_cycle_steps:
+            # Restart cycle
             self.cycle += 1
-            self.current_epoch = 0
-            self.t_current = int(self.t_current * self.t_mult)
-
+            self.step_in_cycle = 0
+            self.cur_cycle_steps = int(self.first_cycle_steps * (self.cycle_mult ** self.cycle))
+            self.max_lr = self.base_max_lr * (self.gamma ** self.cycle)
+        else:
+            self.step_in_cycle += 1
+        
+        self.last_epoch = epoch
         for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
             param_group['lr'] = lr
 
     def state_dict(self):
         return {
-            'base_lrs': self.base_lrs,
-            'last_epoch': self.last_epoch,
-            't_max': self.t_max,
-            'eta_min': self.eta_min,
-            't_mult': self.t_mult,
+            'first_cycle_steps': self.first_cycle_steps,
+            'cycle_mult': self.cycle_mult,
+            'base_max_lr': self.base_max_lr,
+            'max_lr': self.max_lr,
+            'min_lr': self.min_lr,
+            'warmup_steps': self.warmup_steps,
+            'gamma': self.gamma,
+            'cur_cycle_steps': self.cur_cycle_steps,
             'cycle': self.cycle,
-            't_current': self.t_current,
+            'step_in_cycle': self.step_in_cycle,
+            'last_epoch': self.last_epoch
         }
 
     def load_state_dict(self, state_dict):
-        self.base_lrs = state_dict['base_lrs']
-        self.last_epoch = state_dict['last_epoch']
-        self.t_max = state_dict['t_max']
-        self.eta_min = state_dict['eta_min']
-        self.t_mult = state_dict['t_mult']
+        self.first_cycle_steps = state_dict['first_cycle_steps']
+        self.cycle_mult = state_dict['cycle_mult']
+        self.base_max_lr = state_dict['base_max_lr']
+        self.max_lr = state_dict['max_lr']
+        self.min_lr = state_dict['min_lr']
+        self.warmup_steps = state_dict['warmup_steps']
+        self.gamma = state_dict['gamma']
+        self.cur_cycle_steps = state_dict['cur_cycle_steps']
         self.cycle = state_dict['cycle']
-        self.t_current = state_dict['t_current']
+        self.step_in_cycle = state_dict['step_in_cycle']
+        self.last_epoch = state_dict['last_epoch']

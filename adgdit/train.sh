@@ -12,12 +12,15 @@ results_dir=./log_EXP_dit_XL_2_AD2_meta                                  # save 
 batch_size=64                                        # training batch size
 image_size=256                                         # training image resolution
 grad_accu_steps=2                                     # gradient accumulation
-warmup_num_steps=0                                     # warm-up steps
+warmup_num_steps=2000                                     # warm-up steps
 lr=0.0001                                              # learning rate
 ckpt_every=9999999                                     # create a ckpt every a few steps.
 ckpt_latest_every=9999999                              # create a ckpt named `latest.pt` every a few steps.
 ckpt_every_n_epoch=100                                 # create a ckpt every a few epochs.
 epochs=2000                                          # additional training epochs
+t_max=2000                                            # steps per cosine cycle
+eta_min=1e-5                                          # minimum learning rate during decay
+t_mult=1.0                                            # multiplier for each cycle
 
 
 sh $(dirname "$0")/run_g.sh \
@@ -33,9 +36,10 @@ sh $(dirname "$0")/run_g.sh \
     --global-seed 999 \
     --grad-accu-steps ${grad_accu_steps} \
     --lr_schedule COSINE_ANNEALING_RESTARTS \
-    --t_max 200 \
-    --eta_min 1e-5 \
-    --t_mult 2.0 \
+    --t_max ${t_max} \
+    --eta_min ${eta_min} \
+    --t_mult ${t_mult} \
+    --warmup-num-steps ${warmup_num_steps} \
     --results-dir ${results_dir} \
     --epochs ${epochs} \
     --ckpt-every ${ckpt_every} \
