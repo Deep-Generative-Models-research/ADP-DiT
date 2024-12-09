@@ -191,6 +191,28 @@ def override_warmupLR_params(args, params):
     if hasattr(args, WARMUP_TYPE) and args.warmup_type is not None:
         params[WARMUP_TYPE] = args.warmup_type
 
+def override_cosine_annealing_params(args, params):
+    """Override parameters for Cosine Annealing Warmup Restarts schedule."""
+    if hasattr(args, 't_max') and args.t_max is not None:
+        params['t_max'] = args.t_max
+
+    if hasattr(args, 'eta_min') and args.eta_min is not None:
+        params['eta_min'] = args.eta_min
+
+    if hasattr(args, 't_mult') and args.t_mult is not None:
+        params['t_mult'] = args.t_mult
+
+    if hasattr(args, 'gamma') and args.gamma is not None:
+        params['gamma'] = args.gamma
+
+    if hasattr(args, 'warmup_steps') and args.warmup_steps is not None:
+        params['warmup_steps'] = args.warmup_steps
+
+    if hasattr(args, 'max_lr') and args.max_lr is not None:
+        params['max_lr'] = args.max_lr
+
+    if hasattr(args, 'min_lr') and args.min_lr is not None:
+        params['min_lr'] = args.min_lr
 
 def override_params(args, params):
     # LR range test params
@@ -201,6 +223,10 @@ def override_params(args, params):
 
     # WarmupLR params
     override_warmupLR_params(args, params)
+
+    #Cosine Annealing
+    override_cosine_annealing_params(args, params)  # Added
+
 
 
 def get_config_from_args(args):
@@ -219,11 +245,7 @@ def get_config_from_args(args):
     elif args.lr_schedule == ONE_CYCLE:
         override_1cycle_params(args, config['params'])
     elif args.lr_schedule == COSINE_ANNEALING_RESTARTS:
-        config['params'] = {
-            "t_max": args.t_max,
-            "eta_min": args.eta_min,
-            "t_mult": args.t_mult
-        }
+        override_cosine_annealing_params(args, config['params'])  # Added Cosine Annealing
     else:
         override_warmupLR_params(args, config['params'])
 
@@ -248,6 +270,8 @@ def get_lr_from_config(config):
         return lr_params[LR_RANGE_TEST_MIN_LR], ''
     if lr_schedule == ONE_CYCLE:
         return lr_params[CYCLE_MAX_LR], ''
+    if lr_schedule == COSINE_ANNEALING_RESTARTS:  # Added Cosine Annealing
+        return lr_params['max_lr'], ''
     # Warmup LR
     return lr_params[WARMUP_MAX_LR], ''
 
@@ -783,7 +807,7 @@ class WarmupDecayLR(WarmupLR):
 class CosineAnnealingWarmupRestarts(_LRScheduler):
     """
     Implements Cosine Annealing with Warmup and Restarts.
-    
+
     Args:
         optimizer (Optimizer): Wrapped optimizer.
         first_cycle_steps (int): Number of steps in the first cycle.
@@ -794,7 +818,7 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
         gamma (float): Factor by which max_lr is reduced after each cycle. Default: 1.0.
         last_epoch (int): Index of the last epoch. Default: -1.
     """
-    
+
     def __init__(self,
                  optimizer: torch.optim.Optimizer,
                  first_cycle_steps: int,
@@ -812,22 +836,20 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
         self.min_lr = min_lr
         self.warmup_steps = warmup_steps
         self.gamma = gamma
-        
+
         self.cur_cycle_steps = first_cycle_steps
         self.cycle = 0
         self.step_in_cycle = last_epoch if last_epoch != -1 else 0
-        
+
         super(CosineAnnealingWarmupRestarts, self).__init__(optimizer, last_epoch)
-        
+
     def get_lr(self):
         if self.step_in_cycle < self.warmup_steps:
-            # Linear warmup phase
             return [
                 self.min_lr + (self.max_lr - self.min_lr) * (self.step_in_cycle / self.warmup_steps)
                 for _ in self.optimizer.param_groups
             ]
         else:
-            # Cosine annealing phase
             cosine_steps = self.step_in_cycle - self.warmup_steps
             total_cosine_steps = self.cur_cycle_steps - self.warmup_steps
             return [
@@ -839,16 +861,15 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
     def step(self, epoch=None):
         if epoch is None:
             epoch = self.last_epoch + 1
-        
+
         if epoch > 0 and (self.step_in_cycle + 1) >= self.cur_cycle_steps:
-            # Restart cycle
             self.cycle += 1
             self.step_in_cycle = 0
             self.cur_cycle_steps = int(self.first_cycle_steps * (self.cycle_mult ** self.cycle))
             self.max_lr = self.base_max_lr * (self.gamma ** self.cycle)
         else:
             self.step_in_cycle += 1
-        
+
         self.last_epoch = epoch
         for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
             param_group['lr'] = lr
