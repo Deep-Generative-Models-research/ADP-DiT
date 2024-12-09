@@ -13,9 +13,9 @@ image_size=256                                         # training image resoluti
 grad_accu_steps=2                                     # gradient accumulation
 warmup_num_steps=2000                                     # warm-up steps
 lr=0.0001                                              # learning rate
-ckpt_every=1000                                        # create a ckpt every a few steps.
-ckpt_latest_every=1000                                 # create a ckpt named `latest.pt` every a few steps.
-ckpt_every_n_epoch=10                                 # create a ckpt every a few epochs.
+ckpt_every=9999999                                     # create a ckpt every a few steps.
+ckpt_latest_every=9999999                              # create a ckpt named `latest.pt` every a few steps.
+ckpt_every_n_epoch=100                                 # create a ckpt every a few epochs.
 epochs=2000                                          # additional training epochs
 t_max=2000                                            # steps per cosine cycle
 eta_min=1e-5                                          # minimum learning rate during decay
@@ -51,3 +51,29 @@ sh $(dirname "$0")/run_g.sh \
     --gradient-checkpointing \
     --cpu-offloading \
     "$@"
+
+
+
+
+    # --resume \
+    # --resume-module-root ${resume_module_root} \
+    # --resume-ema-root ${resume_ema_root} \
+
+# CosineAnnealingRestarts 스케쥴러
+    # --lr_schedule COSINE_ANNEALING_RESTARTS \
+    # --t_max 1000 \
+    # --eta_min 1e-6 \
+    # --t_mult 2.0 \
+
+
+# OneCycle 스케쥴러
+#    --lr_schedule OneCycle \                          # Specify the scheduler
+#    --cycle-min-lr 0.00001 \                           # Minimum learning rate
+#    --cycle-max-lr ${lr} \                             # Maximum learning rate
+#    --cycle-first-step-size $((epochs / 2)) \          # Rising phase steps
+#    --cycle-second-step-size $((epochs / 2)) \         # Falling phase steps
+
+# Warmup 스케쥴러
+    # --warmup-num-steps ${warmup_num_steps} \
+    # --lr_schedule WarmupDecayLR \                    # Specify the scheduler
+    # --total-num-steps ${total_steps} \                # Total number of steps for warmup and decay
