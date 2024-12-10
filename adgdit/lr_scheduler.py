@@ -47,8 +47,9 @@ WARMUP_NUM_STEPS = 'warmup_num_steps'
 WARMUP_TYPE = 'warmup_type'
 WARMUP_LOG_RATE = 'log'
 WARMUP_LINEAR_RATE = 'linear'
-
 TOTAL_NUM_STEPS = 'total_num_steps'
+
+
 
 
 def add_tuning_arguments(parser):
@@ -111,10 +112,12 @@ def add_tuning_arguments(parser):
     # CosineAnnealingRestarts-specific settings
     group.add_argument('--t_max', type=int, default=2000, help='Max iterations for the first cycle.')
     group.add_argument('--eta_min', type=float, default=1e-5, help='Minimum learning rate.')
-    group.add_argument('--t_mult', type=float, default=1.0, help='Factor to increase cycle duration.')
-    group.add_argument('--warmup_steps', type=int, default=2000, help='Number of warmup steps.')
+    group.add_argument('--t_mult', type=float, default=2.0, help='Factor to increase cycle duration.')
+    group.add_argument('--warmup_steps', type=int, default=100, help='Number of warmup steps.')
     group.add_argument('--max_lr', type=float, default=0.0001, help='Maximum learning rate.')
     group.add_argument('--min_lr', type=float, default=0.00001, help='Minimum learning rate.')
+    group.add_argument('--gamma', type=float, default=1.0, help='Factor to reduce max_lr after each restart.')
+
 
     return parser
 
@@ -191,28 +194,22 @@ def override_warmupLR_params(args, params):
     if hasattr(args, WARMUP_TYPE) and args.warmup_type is not None:
         params[WARMUP_TYPE] = args.warmup_type
 
-def override_cosine_annealing_params(args, params):
-    """Override parameters for Cosine Annealing Warmup Restarts schedule."""
+def override_params(args, params):
+    # Cosine Annealing Warmup Restarts parameters
     if hasattr(args, 't_max') and args.t_max is not None:
         params['t_max'] = args.t_max
-
     if hasattr(args, 'eta_min') and args.eta_min is not None:
         params['eta_min'] = args.eta_min
-
     if hasattr(args, 't_mult') and args.t_mult is not None:
         params['t_mult'] = args.t_mult
-
-    if hasattr(args, 'gamma') and args.gamma is not None:
-        params['gamma'] = args.gamma
-
     if hasattr(args, 'warmup_steps') and args.warmup_steps is not None:
         params['warmup_steps'] = args.warmup_steps
-
     if hasattr(args, 'max_lr') and args.max_lr is not None:
         params['max_lr'] = args.max_lr
-
     if hasattr(args, 'min_lr') and args.min_lr is not None:
         params['min_lr'] = args.min_lr
+    if hasattr(args, 'gamma') and args.gamma is not None:
+        params['gamma'] = args.gamma
 
 def override_params(args, params):
     # LR range test params
@@ -236,9 +233,8 @@ def get_config_from_args(args):
     if not args.lr_schedule in VALID_LR_SCHEDULES:
         return None, '{} is not supported LR schedule'.format(args.lr_schedule)
 
-    config = {}
-    config['type'] = args.lr_schedule
-    config['params'] = {}
+    config = {'type': args.lr_schedule, 'params': {}}
+
 
     if args.lr_schedule == LR_RANGE_TEST:
         override_lr_range_test_params(args, config['params'])
@@ -807,27 +803,9 @@ class WarmupDecayLR(WarmupLR):
 class CosineAnnealingWarmupRestarts(_LRScheduler):
     """
     Implements Cosine Annealing with Warmup and Restarts.
-
-    Args:
-        optimizer (Optimizer): Wrapped optimizer.
-        first_cycle_steps (int): Number of steps in the first cycle.
-        cycle_mult (float): Multiplier to increase the cycle duration after each restart. Default: 1.0.
-        max_lr (float): Initial maximum learning rate. Default: 0.1.
-        min_lr (float): Minimum learning rate. Default: 0.001.
-        warmup_steps (int): Number of warmup steps at the start of each cycle. Default: 0.
-        gamma (float): Factor by which max_lr is reduced after each cycle. Default: 1.0.
-        last_epoch (int): Index of the last epoch. Default: -1.
     """
-
-    def __init__(self,
-                 optimizer: torch.optim.Optimizer,
-                 first_cycle_steps: int,
-                 cycle_mult: float = 1.0,
-                 max_lr: float = 0.1,
-                 min_lr: float = 0.001,
-                 warmup_steps: int = 0,
-                 gamma: float = 1.0,
-                 last_epoch: int = -1):
+    def __init__(self, optimizer: torch.optim.Optimizer, first_cycle_steps: int, cycle_mult: float = 1.0,
+                 max_lr: float = 0.1, min_lr: float = 0.001, warmup_steps: int = 0, gamma: float = 1.0, last_epoch: int = -1):
         assert first_cycle_steps > warmup_steps, "first_cycle_steps must be greater than warmup_steps"
         self.first_cycle_steps = first_cycle_steps
         self.cycle_mult = cycle_mult
@@ -836,11 +814,9 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
         self.min_lr = min_lr
         self.warmup_steps = warmup_steps
         self.gamma = gamma
-
         self.cur_cycle_steps = first_cycle_steps
         self.cycle = 0
         self.step_in_cycle = last_epoch if last_epoch != -1 else 0
-
         super(CosineAnnealingWarmupRestarts, self).__init__(optimizer, last_epoch)
 
     def get_lr(self):
@@ -858,7 +834,7 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
                 for _ in self.optimizer.param_groups
             ]
 
-    def step(self, epoch=None):
+    def step(self, epoch=None,*args, **kwargs):
         if epoch is None:
             epoch = self.last_epoch + 1
 

@@ -24,7 +24,7 @@ from adgdit.constants import VAE_EMA_PATH, TEXT_ENCODER, TOKENIZER
 from adgdit.data_loader.arrow_load_stream import TextImageArrowStream
 from adgdit.diffusion import create_diffusion
 from adgdit.ds_config import deepspeed_config_from_args
-from adgdit.lr_scheduler import WarmupLR, add_tuning_arguments
+from adgdit.lr_scheduler import CosineAnnealingWarmupRestarts, add_tuning_arguments
 from adgdit.modules.ema import EMA
 from adgdit.modules.fp16_layers import Float16Module
 from adgdit.modules.models import ADG_DIT_MODELS, ADGDiT
@@ -35,16 +35,25 @@ def deepspeed_initialize(args, logger, model, opt, deepspeed_config):
     logger.info(f"Initialize deepspeed...")
     logger.info(f"    Using deepspeed optimizer")
 
-    def get_learning_rate_scheduler(warmup_min_lr, lr, warmup_num_steps, opt):
-        return WarmupLR(opt, warmup_min_lr, lr, warmup_num_steps)
+    def get_learning_rate_scheduler(optimizer):
+        """Use CosineAnnealingWarmupRestarts for the scheduler"""
+        return CosineAnnealingWarmupRestarts(
+            optimizer=optimizer,
+            first_cycle_steps=args.t_max,  # total steps for first cosine cycle
+            cycle_mult=args.t_mult,       # multiplier for each cycle's duration
+            max_lr=args.max_lr,          # maximum learning rate
+            min_lr=args.min_lr,          # minimum learning rate
+            warmup_steps=args.warmup_steps,  # warmup steps before cosine decay starts
+            gamma=args.gamma            # decay factor for max_lr on each restart
+        )
 
-    logger.info(f"    Building scheduler with warmup_min_lr={args.warmup_min_lr}, warmup_num_steps={args.warmup_num_steps}")
+    logger.info(f"    Building scheduler with first_cycle_steps={args.t_max}, cycle_mult={args.t_mult}, warmup_steps={args.warmup_steps}")
     model, opt, _, scheduler = deepspeed.initialize(
         model=model,
         model_parameters=get_trainable_params(model),
         config_params=deepspeed_config,
         args=args,
-        lr_scheduler=partial(get_learning_rate_scheduler, args.warmup_min_lr, args.lr, args.warmup_num_steps) if args.warmup_num_steps > 0 else None,
+        lr_scheduler=partial(get_learning_rate_scheduler)
     )
     return model, opt, scheduler
 

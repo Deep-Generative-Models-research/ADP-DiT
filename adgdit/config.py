@@ -162,13 +162,12 @@ def get_args(default_args=None):
                         help="Extend or interpolate the positional embedding of the image.")
     parser.add_argument("--rope-real", action="store_true",
                         help="Use real part and imaginary part separately for RoPE.")
-    # 🚀 추가된 인자들
-    parser.add_argument('--first-cycle-steps', type=int, default=2000, help='Number of steps for the first cycle.')
-    parser.add_argument('--cycle-mult', type=float, default=2.0, help='Multiplier to increase the cycle duration after each restart.')
-    parser.add_argument('--gamma', type=float, default=0.9, help='Factor to reduce max_lr after each cycle.')
-    parser.add_argument('--warmup-steps', type=int, default=2000, help='Number of warmup steps.')
-    parser.add_argument('--max-lr', type=float, default=0.0001, help='Maximum learning rate.')
-    parser.add_argument('--min-lr', type=float, default=1e-5, help='Minimum learning rate.')
+
+    # Add arguments related to learning rate scheduler
+    parser.add_argument('--warmup-steps', type=int, default=20, help='Number of warmup steps before cosine decay.')
+    parser.add_argument('--max-lr', type=float, default=0.0001, help='Maximum learning rate for scheduler.')
+    parser.add_argument('--min-lr', type=float, default=1e-5, help='Minimum learning rate for scheduler.')
+
 
     # Classifier-free
     parser.add_argument("--uncond-p", type=float, default=0.2,

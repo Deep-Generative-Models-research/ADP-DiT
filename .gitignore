@@ -159,3 +159,6 @@ eval/
 log_EXP_dit_g_2_AD2_meta/
 log_EXP_dit_XL_2_AD2_meta/
 adgdit/ds_config.py
+log_EXP_dit_g_2_AD2/
+
+adgdit/train.sh
