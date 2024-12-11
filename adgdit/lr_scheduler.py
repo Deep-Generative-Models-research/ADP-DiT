@@ -194,7 +194,7 @@ def override_warmupLR_params(args, params):
     if hasattr(args, WARMUP_TYPE) and args.warmup_type is not None:
         params[WARMUP_TYPE] = args.warmup_type
 
-def override_params(args, params):
+def override_cosine_annealing_params(args, params):
     # Cosine Annealing Warmup Restarts parameters
     if hasattr(args, 't_max') and args.t_max is not None:
         params['t_max'] = args.t_max
@@ -834,7 +834,7 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
                 for _ in self.optimizer.param_groups
             ]
 
-    def step(self, epoch=None,*args, **kwargs):
+    def step(self, epoch=None, *args, **kwargs):
         if epoch is None:
             epoch = self.last_epoch + 1
 
@@ -847,8 +847,16 @@ class CosineAnnealingWarmupRestarts(_LRScheduler):
             self.step_in_cycle += 1
 
         self.last_epoch = epoch
-        for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
+        lrs = self.get_lr()
+        for param_group, lr in zip(self.optimizer.param_groups, lrs):
             param_group['lr'] = lr
+        self._last_lr = lrs  # update _last_lr
+
+    def get_last_lr(self):
+        if not hasattr(self, '_last_lr'):
+            raise ValueError("Need to call `step()` before `get_last_lr()`")
+        return self._last_lr
+
 
     def state_dict(self):
         return {
