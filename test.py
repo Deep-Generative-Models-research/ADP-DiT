@@ -61,3 +61,22 @@ merged_df.to_csv(output_path, index=False)
 
 # # Save the updated CSV file
 # merged_df.to_csv(image_text_path, index=False)
+
+# import torch
+
+# checkpoint_path = "/mnt/ssd/ADG-DiT/ADG-DiT_G_2_ADoldversion/001-dit_g_2/checkpoints/e1300.pt/mp_rank_00_model_states.pt"
+# state_dict = torch.load(checkpoint_path, map_location='cpu')
+
+# with open("model_shapes.txt", "w") as f:
+#     f.write("Keys in the state_dict:\n")
+#     for key in state_dict.keys():
+#         f.write(key + "\n")
+
+#     if 'module' in state_dict:
+#         model_state = state_dict['module']
+#     else:
+#         model_state = state_dict
+
+#     f.write("\nModel state parameters and shapes:\n")
+#     for k, v in model_state.items():
+#         f.write(f"{k}: {list(v.shape)}\n")

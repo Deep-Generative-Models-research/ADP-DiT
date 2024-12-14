@@ -347,8 +347,8 @@ class End2End(object):
         if 'style_embedder.weight' not in state_dict and hasattr(self.model, 'style_embedder'):
             raise ValueError(f"You might be attempting to load the weights of ADGDiT version >= 1.2. You need "
                              f"to remove `--use-style-cond` and `--size-cond 1024 1024` to adapt to these weights.")
-        # self.model.load_state_dict(state_dict, strict=True)
-        self.model.load_state_dict(state_dict, strict=False)
+        self.model.load_state_dict(state_dict, strict=True)
+        # self.model.load_state_dict(state_dict, strict=False)
 
     def load_sampler(self, sampler=None):
         pipeline, sampler = get_pipeline(self.args,
