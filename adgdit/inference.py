@@ -328,7 +328,7 @@ class End2End(object):
         else:
             # Assume it's a single weight file in the *.pt format.
             logger.info(f"Loading torch model {model_path}...")
-            state_dict = torch.load(model_path, map_location='cpu')
+            state_dict = torch.load(model_path, map_location=lambda storage, loc: storage)
 
         if bare_model == 'unknown' and ('ema' in state_dict or 'module' in state_dict):
             bare_model = False
