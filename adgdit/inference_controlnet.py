@@ -20,6 +20,7 @@ from .diffusion.pipeline_controlnet import StableDiffusionControlNetPipeline
 from .modules.models import ADGDiT, ADG_DIT_CONFIG
 from .modules.controlnet import ADGControlNet
 from .modules.posemb_layers import get_2d_rotary_pos_embed, get_fill_resize_and_crop
+from .modules.text_encoder import T5Embedder
 from .utils.tools import set_seeds
 from peft import LoraConfig
 
@@ -100,7 +101,7 @@ def _to_tuple(val):
 
 
 def get_pipeline(args, vae, text_encoder, tokenizer, model, device, rank,
-                 infer_mode, controlnet, sampler=None):
+                 embedder_t5, infer_mode, controlnet, sampler=None):
     """
     Get scheduler and pipeline for sampling. The sampler and pipeline are both
     based on diffusers and make some modifications.
@@ -142,6 +143,7 @@ def get_pipeline(args, vae, text_encoder, tokenizer, model, device, rank,
                                        safety_checker=None,
                                        requires_safety_checker=False,
                                        progress_bar_config=progress_bar_config,
+                                       embedder_t5=embedder_t5,
                                        infer_mode=infer_mode,
                                        controlnet=controlnet
                                        )
@@ -177,6 +179,14 @@ class End2End(object):
         tokenizer_path = self.root / "tokenizer"
         self.tokenizer = BertTokenizer.from_pretrained(str(tokenizer_path))
         logger.info(f"Loading CLIP Tokenizer finished")
+
+        # ========================================================================
+        logger.info(f"Loading T5 Text Encoder and T5 Tokenizer...")
+        t5_text_encoder_path = self.root / 'T5'
+        embedder_t5 = T5Embedder(t5_text_encoder_path, torch_dtype=torch.float16, max_length=256)
+        self.embedder_t5 = embedder_t5
+        self.embedder_t5.model.to(self.device)  # Only move encoder to device
+        logger.info(f"Loading t5_text_encoder and t5_tokenizer finished")
 
         # ========================================================================
         logger.info(f"Loading VAE...")
@@ -338,13 +348,18 @@ class End2End(object):
                              f"to set `--use-style-cond --size-cond 1024 1024 --beta-end 0.03` to adapt to these weights."
                              f"Alternatively, you can use weights of version >= 1.2, which no longer depend on "
                              f"these two parameters.")
+        if 'style_embedder.weight' not in state_dict and hasattr(self.model, 'style_embedder'):
+            raise ValueError(f"You might be attempting to load the weights of HunYuanDiT version >= 1.2. You need "
+                             f"to remove `--use-style-cond` and `--size-cond 1024 1024` to adapt to these weights.")
 
         if 'style_embedder.weight' in controlnet_state_dict and not hasattr(self.controlnet, 'style_embedder'):
             raise ValueError(f"You might be attempting to load the weights of ADG-DiT version <= 1.1. You need "
                              f"to set `--use-style-cond --size-cond 1024 1024 --beta-end 0.03` to adapt to these weights."
                              f"Alternatively, you can use weights of version >= 1.2, which no longer depend on "
                              f"these two parameters.")
-
+        if 'style_embedder.weight' not in controlnet_state_dict and hasattr(self.controlnet, 'style_embedder'):
+            raise ValueError(f"You might be attempting to load the weights of HunYuanDiT version >= 1.2. You need "
+                             f"to remove `--use-style-cond` and `--size-cond 1024 1024` to adapt to these weights.")
         # Don't set strict=False. Always explicitly check the state_dict.
         self.model.load_state_dict(state_dict, strict=True)
         self.controlnet.load_state_dict(controlnet_state_dict, strict=True)
@@ -357,6 +372,7 @@ class End2End(object):
                                          self.model,
                                          device=self.device,
                                          rank=0,
+                                         embedder_t5=self.embedder_t5,
                                          infer_mode=self.infer_mode,
                                          sampler=sampler,
                                          controlnet=self.controlnet

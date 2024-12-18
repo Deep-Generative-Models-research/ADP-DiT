@@ -2,8 +2,9 @@ import math
 import torch
 import torch.nn as nn
 from einops import repeat
+
 from timm.models.layers import to_2tuple
-# from .metadataemb_layers import process_metadata  # Import the function
+
 
 class PatchEmbed(nn.Module):
     """ 2D Image to Patch Embedding
@@ -126,9 +127,9 @@ class TimestepEmbedder(nn.Module):
 #     def forward(self, t, memory_metrics=None):
 #         t_freq = timestep_embedding(t, self.frequency_embedding_size).type(self.mlp[0].weight.dtype)
 #         t_emb = self.mlp(t_freq)  # Shape: [B, H]
-        
+
 #         if memory_metrics is not None:
-#             memory_metrics = self.metric_proj(memory_metrics)  # Shape: [B, 5] ¡æ [B, H]
+#             memory_metrics = self.metric_proj(memory_metrics)  # Shape: [B, 5] ï¿½ï¿½ [B, H]
 #             t_emb = t_emb.unsqueeze(1)  # Shape: [B, 1, H]
 #             memory_metrics = memory_metrics.unsqueeze(1)  # Shape: [B, 1, H]
 #             # Attention over Time Embedding and Memory Metrics

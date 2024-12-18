@@ -17,7 +17,7 @@ PREDICT_TYPE = {
 
 # =======================================================
 
-NEGATIVE_PROMPT = 'Bad eyes, terrible face, disfigured, bad art, deformed, extra limbs, blurry colors, blurry, repetitive, sickly, defective'
+NEGATIVE_PROMPT = 'low quality, blurry, distorted anatomy, extra artifacts, non-medical objects, unrelated symbols, missing brain regions, incorrect contrast, cartoonish, noise, grainy patches'
 
 # =======================================================
 TRT_MAX_BATCH_SIZE = 1
@@ -35,6 +35,14 @@ TEXT_ENCODER = 'ckpts/t2i/clip_text_encoder'
 # clip 모델
 # TOKENIZER = "ckpts/bert/tokenizer"
 # TEXT_ENCODER = 'ckpts/bert/clip_text_encoder'
+T5_ENCODER = {
+    'T5': 'ckpts/t2i/T5',
+    'attention_mask': True,
+    'layer_index': -1,
+    'attention_pool': True,
+    'torch_dtype': torch.float16,
+    'learnable_replace': True
+}
 
 SAMPLER_FACTORY = {
     'ddpm': {

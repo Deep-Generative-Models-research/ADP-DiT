@@ -20,6 +20,7 @@ from .constants import SAMPLER_FACTORY, NEGATIVE_PROMPT, TRT_MAX_WIDTH, TRT_MAX_
 from .diffusion.pipeline import StableDiffusionPipeline
 from .modules.models import ADGDiT, ADG_DIT_CONFIG
 from .modules.posemb_layers import get_2d_rotary_pos_embed, get_fill_resize_and_crop
+from .modules.text_encoder import T5Embedder
 from .utils.tools import set_seeds
 from peft import LoraConfig
 from PIL import Image
@@ -78,6 +79,9 @@ STANDARD_AREA = [
 
 
 def get_standard_shape(target_width, target_height):
+    """
+    Map image size to standard size.
+    """
     target_ratio = target_width / target_height
     closest_ratio_idx = np.argmin(np.abs(STANDARD_RATIO - target_ratio))
     closest_area_idx = np.argmin(np.abs(STANDARD_AREA[closest_ratio_idx] - target_width * target_height))
@@ -138,7 +142,16 @@ def encode_image(image_path, vae, device):
         return None
 
 def get_pipeline(args, vae, text_encoder, tokenizer, model, device, rank,
-                 infer_mode, sampler=None):
+                 embedder_t5, infer_mode, sampler=None):
+    """
+    Get scheduler and pipeline for sampling. The sampler and pipeline are both
+    based on diffusers and make some modifications.
+
+    Returns
+    -------
+    pipeline: StableDiffusionPipeline
+    sampler_name: str
+    """
     sampler = sampler or args.sampler
 
     # Load sampler from factory
@@ -171,6 +184,7 @@ def get_pipeline(args, vae, text_encoder, tokenizer, model, device, rank,
                                        safety_checker=None,
                                        requires_safety_checker=False,
                                        progress_bar_config=progress_bar_config,
+                                       embedder_t5=embedder_t5,
                                        infer_mode=infer_mode,
                                        )
 
@@ -205,6 +219,14 @@ class End2End(object):
         tokenizer_path = self.root / "tokenizer"
         self.tokenizer = BertTokenizer.from_pretrained(str(tokenizer_path))
         logger.info(f"Loading CLIP Tokenizer finished")
+
+        # ========================================================================
+        logger.info(f"Loading T5 Text Encoder and T5 Tokenizer...")
+        t5_text_encoder_path = self.root / 'T5'
+        embedder_t5 = T5Embedder(t5_text_encoder_path, torch_dtype=torch.float16, max_length=256)
+        self.embedder_t5 = embedder_t5
+        self.embedder_t5.model.to(self.device)  # Only move encoder to device
+        logger.info(f"Loading t5_text_encoder and t5_tokenizer finished")
 
         # ========================================================================
         logger.info(f"Loading VAE...")
@@ -298,10 +320,10 @@ class End2End(object):
                     bare_model = False
                 else:
                     raise ValueError(f"Invalid model path: {dit_weight} with unrecognized weight format: "
-                                    f"{list(map(str, files))}. When given a directory as --dit-weight, only "
-                                    f"`pytorch_model_*.pt`(provided by HunyuanDiT official) and "
-                                    f"`*_model_states.pt`(saved by deepspeed) can be parsed. If you want to load a "
-                                    f"specific weight file, please provide the full path to the file.")
+                                     f"{list(map(str, files))}. When given a directory as --dit-weight, only "
+                                     f"`pytorch_model_*.pt` and "
+                                     f"`*_model_states.pt`(saved by deepspeed) can be parsed. If you want to load a "
+                                     f"specific weight file, please provide the full path to the file.")
             elif dit_weight.is_file():
                 model_path = dit_weight
                 bare_model = 'unknown'
@@ -314,7 +336,7 @@ class End2End(object):
 
         if not model_path.exists():
             raise ValueError(f"Model path does not exist: {model_path}")
-            
+
         logger.info(f"Loading model weights from {model_path}...")
 
         # Check for safetensors file and load it
@@ -347,6 +369,7 @@ class End2End(object):
         if 'style_embedder.weight' not in state_dict and hasattr(self.model, 'style_embedder'):
             raise ValueError(f"You might be attempting to load the weights of ADGDiT version >= 1.2. You need "
                              f"to remove `--use-style-cond` and `--size-cond 1024 1024` to adapt to these weights.")
+        # Don't set strict=False. Always explicitly check the state_dict.
         self.model.load_state_dict(state_dict, strict=True)
         # self.model.load_state_dict(state_dict, strict=False)
 
@@ -358,6 +381,7 @@ class End2End(object):
                                          self.model,
                                          device=self.device,
                                          rank=0,
+                                         embedder_t5=self.embedder_t5,
                                          infer_mode=self.infer_mode,
                                          sampler=sampler,
                                          )
@@ -416,6 +440,7 @@ class End2End(object):
             raise ValueError(f"`height` and `width` must be positive integers, got height={height}, width={width}")
         logger.info(f"Input (height, width) = ({height}, {width})")
         if self.infer_mode in ['fa', 'torch']:
+            # We must force height and width to align to 16 and to be an integer.
             target_height = int((height // 16) * 16)
             target_width = int((width // 16) * 16)
             logger.info(f"Align to 16: (height, width) = ({target_height}, {target_width})")
@@ -425,6 +450,9 @@ class End2End(object):
         else:
             raise ValueError(f"Unknown infer_mode: {self.infer_mode}")
 
+        # ========================================================================
+        # Arguments: prompt, new_prompt, negative_prompt
+        # ========================================================================
         if not isinstance(user_prompt, str):
             raise TypeError(f"`user_prompt` must be a string, but got {type(user_prompt)}")
         user_prompt = user_prompt.strip()
@@ -436,16 +464,23 @@ class End2End(object):
             enhanced_prompt = enhanced_prompt.strip()
             prompt = enhanced_prompt
 
+        # negative prompt
         if negative_prompt is None or negative_prompt == '':
             negative_prompt = self.default_negative_prompt
         if not isinstance(negative_prompt, str):
             raise TypeError(f"`negative_prompt` must be a string, but got {type(negative_prompt)}")
 
+        # ========================================================================
+        # Arguments: style. (A fixed argument. Don't Change it.)
+        # ========================================================================
         if use_style_cond:
             style = torch.as_tensor([0, 0] * batch_size, device=self.device)
         else:
             style = None
 
+        # ========================================================================
+        # Inner arguments: image_meta_size (Please refer to SDXL.)
+        # ========================================================================
         if src_size_cond is None:
             size_cond = None
             image_meta_size = None
@@ -459,17 +494,18 @@ class End2End(object):
             size_cond = list(src_size_cond) + [target_width, target_height, 0, 0]
             image_meta_size = torch.as_tensor([size_cond] * 2 * batch_size, device=self.device)
 
+        # ========================================================================
         start_time = time.time()
         logger.debug(f"""
-                    prompt: {user_prompt}
-            enhanced prompt: {enhanced_prompt}
-                        seed: {seed}
-            (height, width): {(target_height, target_width)}
-            negative_prompt: {negative_prompt}
-                batch_size: {batch_size}
-            guidance_scale: {guidance_scale}
-                infer_steps: {infer_steps}
-            image_meta_size: {size_cond}
+                       prompt: {user_prompt}
+              enhanced prompt: {enhanced_prompt}
+                         seed: {seed}
+              (height, width): {(target_height, target_width)}
+              negative_prompt: {negative_prompt}
+                   batch_size: {batch_size}
+               guidance_scale: {guidance_scale}
+                  infer_steps: {infer_steps}
+              image_meta_size: {size_cond}
         """)
         reso = f'{target_height}x{target_width}'
         if reso in self.freqs_cis_img:

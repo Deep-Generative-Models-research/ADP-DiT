@@ -113,12 +113,14 @@ class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoade
             feature_extractor: CLIPImageProcessor,
             requires_safety_checker: bool = True,
             progress_bar_config: Dict[str, Any] = None,
+            embedder_t5=None,
             infer_mode='torch',
             controlnet=None,
     ):
         super().__init__()
 
         # ========================================================
+        self.embedder_t5 = embedder_t5
         self.infer_mode = infer_mode
 
         # ========================================================
@@ -255,6 +257,7 @@ class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoade
             prompt_embeds: Optional[torch.FloatTensor] = None,
             negative_prompt_embeds: Optional[torch.FloatTensor] = None,
             lora_scale: Optional[float] = None,
+            embedder=None,
     ):
         r"""
         Encodes the prompt into text encoder hidden states.
@@ -281,10 +284,17 @@ class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoade
                 argument.
             lora_scale (`float`, *optional*):
                 A lora scale that will be applied to all LoRA layers of the text encoder if LoRA layers are loaded.
+            embedder:
+                T5 embedder (including text encoder and tokenizer)
         """
-        text_encoder = self.text_encoder
-        tokenizer = self.tokenizer
-        max_length = self.tokenizer.model_max_length
+        if embedder is None:
+            text_encoder = self.text_encoder
+            tokenizer = self.tokenizer
+            max_length = self.tokenizer.model_max_length
+        else:
+            text_encoder = embedder.model
+            tokenizer = embedder.tokenizer
+            max_length = embedder.max_length
 
         # set lora scale so that monkey patched LoRA
         # function of text encoder can correctly access it
@@ -528,7 +538,9 @@ class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoade
             generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
             latents: Optional[torch.FloatTensor] = None,
             prompt_embeds: Optional[torch.FloatTensor] = None,
+            prompt_embeds_t5: Optional[torch.FloatTensor] = None,
             negative_prompt_embeds: Optional[torch.FloatTensor] = None,
+            negative_prompt_embeds_t5: Optional[torch.FloatTensor] = None,
             output_type: Optional[str] = "pil",
             return_dict: bool = True,
             callback: Optional[Callable[[int, int, torch.FloatTensor, torch.FloatTensor], None]] = None,
@@ -652,6 +664,17 @@ class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoade
                                negative_prompt_embeds=negative_prompt_embeds,
                                lora_scale=text_encoder_lora_scale,
                                )
+        prompt_embeds_t5, negative_prompt_embeds_t5, attention_mask_t5, uncond_attention_mask_t5 = \
+            self.encode_prompt(prompt,
+                               device,
+                               num_images_per_prompt,
+                               do_classifier_free_guidance,
+                               negative_prompt,
+                               prompt_embeds=prompt_embeds_t5,
+                               negative_prompt_embeds=negative_prompt_embeds_t5,
+                               lora_scale=text_encoder_lora_scale,
+                               embedder=self.embedder_t5,
+                               )
 
         # For classifier free guidance, we need to do two forward passes.
         # Here we concatenate the unconditional and text embeddings into a single batch
@@ -659,6 +682,8 @@ class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoade
         if do_classifier_free_guidance:
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
             attention_mask = torch.cat([uncond_attention_mask, attention_mask])
+            prompt_embeds_t5 = torch.cat([negative_prompt_embeds_t5, prompt_embeds_t5])
+            attention_mask_t5 = torch.cat([uncond_attention_mask_t5, attention_mask_t5])
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -708,6 +733,8 @@ class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoade
                         condition,
                         encoder_hidden_states=prompt_embeds,
                         text_embedding_mask=attention_mask,
+                        encoder_hidden_states_t5=prompt_embeds_t5,
+                        text_embedding_mask_t5=attention_mask_t5,
                         image_meta_size=ims,
                         style=style,
                         cos_cis_img=freqs_cis_img[0],
@@ -724,6 +751,8 @@ class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoade
                         t_expand,
                         encoder_hidden_states=prompt_embeds,
                         text_embedding_mask=attention_mask,
+                        encoder_hidden_states_t5=prompt_embeds_t5,
+                        text_embedding_mask_t5=attention_mask_t5,
                         image_meta_size=ims,
                         style=style,
                         cos_cis_img=freqs_cis_img[0],
@@ -741,6 +770,8 @@ class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoade
                         freqs_cis_img0=freqs_cis_img[0].to(device).contiguous(),
                         freqs_cis_img1=freqs_cis_img[1].to(device).contiguous(),
                         text_embedding_mask=attention_mask.contiguous(),
+                        encoder_hidden_states_t5=prompt_embeds_t5.contiguous(),
+                        text_embedding_mask_t5=attention_mask_t5.contiguous(),
                     )
                 else:
                     raise ValueError("Unknown infer_mode: {self.infer_mode}")

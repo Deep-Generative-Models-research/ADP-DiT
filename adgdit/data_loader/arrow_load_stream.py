@@ -18,6 +18,22 @@ from torch.utils.data import Dataset
 from IndexKits.index_kits import ArrowIndexV2, MultiResolutionBucketIndexV2, MultiIndexV2
 
 
+class GaussianNoise(object):
+    """Apply Gaussian Noise to a tensor image.
+    Assumes input is a torch.Tensor with shape (C, H, W) and dtype float.
+    """
+    def __init__(self, mean=0.0, std=0.03, p=0.3):
+        self.mean = mean
+        self.std = std
+        self.p = p
+
+    def __call__(self, img):
+        if torch.rand(1).item() < self.p:
+            noise = torch.randn(img.size()) * self.std + self.mean
+            img = img + noise
+        return img
+
+
 class TextImageArrowStream(Dataset):
     def __init__(self,
                  args,
@@ -33,15 +49,16 @@ class TextImageArrowStream(Dataset):
                  merge_src_cond=False,
                  uncond_p=0.0,
                  text_ctx_len=77,
-                 tokenizer=None):
+                 tokenizer=None,
+                 uncond_p_t5=0.0,
+                 text_ctx_len_t5=256,
+                 tokenizer_t5=None,
+                 ):
         self.args = args
         self.resolution = resolution
         self.log_fn = lambda x: log_fn(f"    {Path(__file__).stem} | " + x)
 
         self.random_flip = random_flip
-        # If true, the Chinese prompt from the `text_zh` column will be taken from the arrow file;
-        # otherwise, the English prompt from the `text_en` column will be taken,
-        # provided that `text_zh` or `text_en` exists in the arrow file.
         self.enable_CN = enable_CN
         self.index_file = index_file
         self.multireso = multireso
@@ -54,25 +71,57 @@ class TextImageArrowStream(Dataset):
         self.text_ctx_len = text_ctx_len
         self.tokenizer = tokenizer
 
+        # t5 params
+        self.uncond_p_t5 = uncond_p_t5
+        self.text_ctx_len_t5 = text_ctx_len_t5
+        self.tokenizer_t5 = tokenizer_t5
+
         # size condition
         self.random_shrink_size_cond = random_shrink_size_cond
         self.merge_src_cond = merge_src_cond
 
-        assert isinstance(resolution, int), f"resolution must be an integer, got {resolution}"
-        self.flip_norm = T.Compose(
-            [
-                T.RandomHorizontalFlip() if self.random_flip else T.Lambda(lambda x: x),
-                T.ToTensor(),
-                T.Normalize([0.5], [0.5]),
-            ]
-        )
+        # multireso 여부에 따라 augmentation slightly 다르게 적용
+        # multireso = True일 경우, index_manager에서 resize_and_crop 수행 후
+        # 회전, 블러, 대비, 노이즈만 적용
+        # multireso = False일 경우 RandomResizedCrop 포함
 
-        # show info
+        base_transforms = []
+        # 회전 ±5°, p=0.2
+        base_transforms.append(T.RandomApply([T.RandomRotation(degrees=5)], p=0.2))
+
+        if not self.multireso:
+            # multireso가 아닌 경우에만 RandomResizedCrop 적용
+            # scale=(0.9,1.0)로 약간의 크롭
+            base_transforms.append(T.RandomResizedCrop(size=(self.resolution, self.resolution), scale=(0.9,1.0)))
+        else:
+            # multireso인 경우에는 별도로 crop하지 않고 downstream logic 적용
+            base_transforms.append(T.Resize((self.resolution, self.resolution)))  # 그냥 resize로 통일
+
+        # 수평 뒤집기 확률은 0.2 정도로 줄여서 신중하게 적용
+        flip_p = 0.2 if self.random_flip else 0.0
+        base_transforms.append(T.RandomHorizontalFlip(p=flip_p))
+
+        # GaussianBlur (sigma=(0.1,1.0)), p=0.2
+        base_transforms.append(T.RandomApply([T.GaussianBlur(kernel_size=3, sigma=(0.1,1.0))], p=0.2))
+
+        # Contrast 조정 (0.8~1.2)
+        base_transforms.append(T.ColorJitter(contrast=(0.8,1.2)))
+
+        # ToTensor & Normalize
+        base_transforms.append(T.ToTensor())
+
+        # Gaussian Noise: std=0.03, p=0.3
+        base_transforms.append(GaussianNoise(mean=0.0, std=0.03, p=0.3))
+
+        base_transforms.append(T.Normalize([0.5], [0.5]))
+
+        self.image_transforms = T.Compose(base_transforms)
+
         if self.merge_src_cond:
             self.log_fn("Enable merging src condition: (oriW, oriH) --> ((WH)**0.5, (WH)**0.5)")
 
         self.log_fn("Enable image_meta_size condition (original_size, target_size, crop_coords)")
-        self.log_fn(f"Image_transforms: {self.flip_norm}")
+        self.log_fn(f"Image_transforms: {self.image_transforms}")
 
     def load_index(self):
         multireso = self.multireso
@@ -138,19 +187,33 @@ class TextImageArrowStream(Dataset):
         return style
 
     def get_image_with_hwxy(self, index, image_key="image"):
-
         image = self.get_raw_image(index, image_key=image_key)
         origin_size = image.size
 
         if self.multireso:
+            # multireso인 경우 index_manager에서 이미 resize_and_crop 수행
             target_size = self.index_manager.get_target_size(index)
             image, crops_coords_top_left = self.index_manager.resize_and_crop(
                 image, target_size, resample=Image.LANCZOS, crop_type='random')
-            image_tensor = self.flip_norm(image)
+            # 이후 augmentation 적용
+            image_tensor = self.image_transforms(image)
         else:
+            # multireso 아닐 경우, random_crop_image를 하지 않고 바로 transforms로 처리.
+            # transforms에 RandomResizedCrop을 넣었으므로 아래 로직을 그냥 passthrough 하는 게 나음
+            # 필요하다면 원래 random_crop_image 부분을 제거하고 그냥 image_transforms에 맡긴다.
+            # 여기서는 원래 코드를 유지하되 random_crop_image 호출 대신 그냥 원본 이미지를 넣어줌.
+            # RandomResizedCrop이 image_transforms 내부에서 처리할 것.
             target_size = (self.resolution, self.resolution)
-            image_crop, crops_coords_top_left = self.random_crop_image(image, origin_size, target_size)
-            image_tensor = self.flip_norm(image_crop)
+            #image_crop, crops_coords_top_left = self.random_crop_image(image, origin_size, target_size)
+            #image_tensor = self.image_transforms(image_crop)
+            # random_crop_image를 제거하고 원본 이미지를 image_transforms로 처리
+            # RandomResizedCrop이 내부에서 (0.9~1.0) 범위로 크롭하므로, crop coords 필요시 계산 불가.
+            # 여기서는 crop_coords_top_left를 (0,0)으로 두거나 필요 없다면 제외.
+            # 만약 image_meta_size를 정확히 유지하려면 custom crop를 유지해야 한다.
+            # 여기서는 권장 강도에 맞춘 증강을 위해 RandomResizedCrop을 사용하므로 custom crop를 비활성.
+            # 대신 crop_coords_top_left를 (0,0)으로 설정.
+            crops_coords_top_left = (0, 0)
+            image_tensor = self.image_transforms(image)
 
         if self.random_shrink_size_cond:
             origin_size = (1024 if origin_size[0] < 1024 else origin_size[0],
@@ -184,6 +247,25 @@ class TextImageArrowStream(Dataset):
             attention_mask[1:pad_num + 1] = False
         return description, text_input_ids, attention_mask
 
+    def fill_t5_token_mask(self, fill_tensor, fill_number, setting_length):
+        fill_length = setting_length - fill_tensor.shape[1]
+        if fill_length > 0:
+            fill_tensor = torch.cat((fill_tensor, fill_number * torch.ones(1, fill_length)), dim=1)
+        return fill_tensor
+
+    def get_text_info_with_encoder_t5(self, description_t5):
+        text_tokens_and_mask = self.tokenizer_t5(
+            description_t5,
+            max_length=self.text_ctx_len_t5,
+            truncation=True,
+            return_attention_mask=True,
+            add_special_tokens=True,
+            return_tensors='pt'
+        )
+        text_input_ids_t5 = self.fill_t5_token_mask(text_tokens_and_mask["input_ids"], fill_number=1, setting_length=self.text_ctx_len_t5).long()
+        attention_mask_t5 = self.fill_t5_token_mask(text_tokens_and_mask["attention_mask"], fill_number=0, setting_length=self.text_ctx_len_t5).bool()
+        return description_t5, text_input_ids_t5, attention_mask_t5
+
     def get_original_text(self, ind):
         text = self.index_manager.get_attribute(ind, 'text_zh' if self.enable_CN else 'text_en')
         text = str(text).strip()
@@ -202,15 +284,23 @@ class TextImageArrowStream(Dataset):
         else:
             description = self.get_text(ind)
 
+        # Get text for t5
+        if random.random() < self.uncond_p_t5:
+            description_t5 = ""
+        else:
+            description_t5 = self.get_text(ind)
+
         original_pil_image, kwargs = self.get_image_with_hwxy(ind)
 
         # Use encoder to embed tokens online
         text, text_embedding, text_embedding_mask = self.get_text_info_with_encoder(description)
-
+        text_t5, text_embedding_t5, text_embedding_mask_t5 = self.get_text_info_with_encoder_t5(description_t5)
         return (
             original_pil_image,
             text_embedding.clone().detach(),
             text_embedding_mask.clone().detach(),
+            text_embedding_t5.clone().detach(),
+            text_embedding_mask_t5.clone().detach(),
             {k: torch.tensor(np.array(v)).clone().detach() for k, v in kwargs.items()},
         )
 

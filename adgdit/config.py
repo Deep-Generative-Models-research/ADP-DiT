@@ -39,7 +39,7 @@ def get_args(default_args=None):
     parser.add_argument("--norm", type=str, choices=["rms", "laryer"], default="layer", help="Normalization layer type")
     parser.add_argument("--text-states-dim", type=int, default=1024, help="Hidden size of CLIP text encoder.")
     parser.add_argument("--text-len", type=int, default=77, help="Token length of CLIP text encoder output.")
-    parser.add_argument("--text-states-dim-t5", type=int, default=2048, help="Hidden size of CLIP text encoder.")
+    parser.add_argument("--text-states-dim-t5", type=int, default=4096, help="Hidden size of CLIP text encoder.")
     parser.add_argument("--text-len-t5", type=int, default=256, help="Token length of T5 text encoder output.")
 
     # LoRA config
@@ -81,7 +81,7 @@ def get_args(default_args=None):
     # ========================================================================================================
 
     # Basic Setting
-    parser.add_argument("--prompt", type=str, default="Tumor Patient", help="The prompt for generating images.")
+    parser.add_argument("--prompt", type=str, default="Alzheimer Disease, Female, 72 years old, 7 months from first visit", help="The prompt for generating images.")
     parser.add_argument("--model-root", type=str, default="ckpts",
                         help="Root path of all the models, including t2i model and dialoggen model.")
     parser.add_argument("--dit-weight", type=str, default=None,
@@ -133,7 +133,7 @@ def get_args(default_args=None):
     parser.set_defaults(enhance=True)
 
     # App
-    parser.add_argument("--lang", type=str, default="en", choices=["zh", "en"], help="Language")
+    parser.add_argument("--lang", type=str, default="en", help="Language")
 
 
     # ========================================================================================================
@@ -173,7 +173,7 @@ def get_args(default_args=None):
     parser.add_argument("--uncond-p", type=float, default=0.2,
                         help="The probability of dropping training text used for CLIP feature extraction")
     parser.add_argument("--uncond-p-t5", type=float, default=0.2,
-                        help="The probability of dropping training text used for mT5 feature extraction")
+                        help="The probability of dropping training text used for T5 feature extraction")
 
     # Directory
     parser.add_argument("--results-dir", type=str, default="results")
@@ -181,7 +181,7 @@ def get_args(default_args=None):
     parser.add_argument("--resume-module-root", type=str, default=None, help="Resume model states.")
     parser.add_argument("--resume-ema-root", type=str, default=None, help="Resume ema states.")
     parser.add_argument("--no-strict", dest="strict", action="store_false", help="Strict loading of checkpoint")
-    parser.set_defaults(strict=False)
+    parser.set_defaults(strict=True)
 
     # Dataset
     parser.add_argument("--index-file", type=str, nargs='+', help="During training, provide a JSON file with data indices.")

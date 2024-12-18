@@ -20,7 +20,8 @@ from torch.utils.tensorboard import SummaryWriter
 from IndexKits.index_kits import ResolutionGroup
 from IndexKits.index_kits.sampler import DistributedSamplerWithStartIndex, BlockDistributedSampler
 from adgdit.config import get_args
-from adgdit.constants import VAE_EMA_PATH, TEXT_ENCODER, TOKENIZER
+from adgdit.constants import VAE_EMA_PATH, TEXT_ENCODER, TOKENIZER, T5_ENCODER
+from adgdit.modules.text_encoder import T5Embedder
 from adgdit.data_loader.arrow_load_stream import TextImageArrowStream
 from adgdit.diffusion import create_diffusion
 from adgdit.ds_config import deepspeed_config_from_args
@@ -122,16 +123,25 @@ def save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoi
 
 
 @torch.no_grad()
-def prepare_model_inputs(args, batch, device, vae, text_encoder, freqs_cis_img):
-    # image, text_embedding, text_embedding_mask, _, _, kwargs = batch
-    image, text_embedding, text_embedding_mask,kwargs = batch
-    # clip text embedding
+def prepare_model_inputs(args, batch, device, vae, text_encoder, text_encoder_t5, freqs_cis_img):
+    image, text_embedding, text_embedding_mask, text_embedding_t5, text_embedding_mask_t5, kwargs = batch
+
+    # clip & T5 text embedding
     text_embedding = text_embedding.to(device)
     text_embedding_mask = text_embedding_mask.to(device)
     encoder_hidden_states = text_encoder(
         text_embedding.to(device),
         attention_mask=text_embedding_mask.to(device),
     )[0]
+    text_embedding_t5 = text_embedding_t5.to(device).squeeze(1)
+    text_embedding_mask_t5 = text_embedding_mask_t5.to(device).squeeze(1)
+    with torch.no_grad():
+        output_t5 = text_encoder_t5(
+            input_ids=text_embedding_t5,
+            attention_mask=text_embedding_mask_t5 if T5_ENCODER['attention_mask'] else None,
+            output_hidden_states=True
+        )
+        encoder_hidden_states_t5 = output_t5['hidden_states'][T5_ENCODER['layer_index']].detach()
 
     # additional condition
     if args.size_cond:
@@ -170,11 +180,12 @@ def prepare_model_inputs(args, batch, device, vae, text_encoder, freqs_cis_img):
     model_kwargs = dict(
         encoder_hidden_states=encoder_hidden_states,
         text_embedding_mask=text_embedding_mask,
+        encoder_hidden_states_t5=encoder_hidden_states_t5,
+        text_embedding_mask_t5=text_embedding_mask_t5,
         image_meta_size=image_meta_size,
         style=style,
         cos_cis_img=cos_cis_img,
         sin_cis_img=sin_cis_img,
-        # metadata_embedding=combined_embedding,  # Pass combined embedding
     )
 
     return latents, model_kwargs
@@ -224,11 +235,17 @@ def main(args):
     tf_logging.set_verbosity_error()
 
     # ===========================================================================
-    # Building HYDIT
+    # Building ADG-DiT
     # ===========================================================================
 
-    logger.info("Building HYDIT Model.")
+    logger.info("Building ADG-DiT Model.")
 
+    # ---------------------------------------------------------------------------
+    #   Training sample base size, such as 256/512/1024. Notice that this size is
+    #   just a base size, not necessary the actual size of training samples. Actual
+    #   size of the training samples are correlated with `resolutions` when enabling
+    #   multi-resolution training.
+    # ---------------------------------------------------------------------------
     image_size = args.image_size
     if len(image_size) == 1:
         image_size = [image_size[0], image_size[0]]
@@ -304,15 +321,21 @@ def main(args):
     # Setup BERT tokenizer:
     logger.info(f"    Loading Bert tokenizer from {TOKENIZER}")
     tokenizer = BertTokenizer.from_pretrained(TOKENIZER)
-    # tokenizer = CLIPTokenizer.from_pretrained(TOKENIZER)
+    # Setup T5 text encoder
+    t5_path = T5_ENCODER['T5']
+    embedder_t5 = T5Embedder(t5_path, torch_dtype=T5_ENCODER['torch_dtype'], max_length=args.text_len_t5)
+    tokenizer_t5 = embedder_t5.tokenizer
+    text_encoder_t5 = embedder_t5.model
 
     if args.extra_fp16:
         logger.info(f"    Using fp16 for extra modules: vae, text_encoder")
         vae = vae.half().to(device)
         text_encoder = text_encoder.half().to(device)
+        text_encoder_t5 = text_encoder_t5.half().to(device)
     else:
         vae = vae.to(device)
         text_encoder = text_encoder.to(device)
+        text_encoder_t5 = text_encoder_t5.to(device)
 
     logger.info(f"    Optimizer parameters: lr={args.lr}, weight_decay={args.weight_decay}")
     logger.info("    Using deepspeed optimizer")
@@ -338,6 +361,9 @@ def main(args):
                                    uncond_p=args.uncond_p,
                                    text_ctx_len=args.text_len,
                                    tokenizer=tokenizer,
+                                   uncond_p_t5=args.uncond_p_t5,
+                                   text_ctx_len_t5=args.text_len_t5,
+                                   tokenizer_t5=tokenizer_t5,
                                    )
     if args.multireso:
         sampler = BlockDistributedSampler(dataset, num_replicas=world_size, rank=rank, seed=args.global_seed,
@@ -445,18 +471,18 @@ def main(args):
         dataset.shuffle(seed=shuffle_seed, fast=True)
         logger.info(f"    End of random shuffle")
 
-        # # Move sampler to start_index
-        # if not args.multireso:
-        #     start_index = start_epoch_step * world_size * batch_size
-        #     if start_index != sampler.start_index:
-        #         sampler.start_index = start_index
-        #         # Reset start_epoch_step to zero, to ensure next epoch will start from the beginning.
-        #         start_epoch_step = 0
-        #         logger.info(f"      Iters left this epoch: {len(loader):,}")
+        # Move sampler to start_index
+        if not args.multireso:
+            start_index = start_epoch_step * world_size * batch_size
+            if start_index != sampler.start_index:
+                sampler.start_index = start_index
+                # Reset start_epoch_step to zero, to ensure next epoch will start from the beginning.
+                start_epoch_step = 0
+                logger.info(f"      Iters left this epoch: {len(loader):,}")
 
         logger.info(f"    Beginning epoch {epoch}...")
         for batch in loader:
-            latents, model_kwargs = prepare_model_inputs(args, batch, device, vae, text_encoder, freqs_cis_img)
+            latents, model_kwargs = prepare_model_inputs(args, batch, device, vae, text_encoder, text_encoder_t5, freqs_cis_img)
 
             loss_dict = diffusion.training_losses(model=model, x_start=latents, model_kwargs=model_kwargs)
             loss = loss_dict["loss"].mean()

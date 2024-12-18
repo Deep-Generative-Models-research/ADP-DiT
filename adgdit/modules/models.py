@@ -204,8 +204,10 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
         self.patch_size = patch_size
         self.num_heads = num_heads
         self.hidden_size = hidden_size
+        self.text_states_dim = args.text_states_dim
+        self.text_states_dim_t5 = args.text_states_dim_t5
         self.text_len = args.text_len
-        self.text_states_dim = args.text_states_dim  # CLIP text embedding dimension
+        self.text_len_t5 = args.text_len_t5
         self.norm = args.norm
 
         use_flash_attn = args.infer_mode == 'fa' or args.use_flash_attn
@@ -213,13 +215,20 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
             log_fn(f"    Enable Flash Attention.")
         qk_norm = args.qk_norm  # See http://arxiv.org/abs/2302.05442 for details.
 
+        self.mlp_t5 = nn.Sequential(
+            nn.Linear(self.text_states_dim_t5, self.text_states_dim_t5 * 4, bias=True),
+            FP32_SiLU(),
+            nn.Linear(self.text_states_dim_t5 * 4, self.text_states_dim, bias=True),
+        )
+        # learnable replace
+        self.text_embedding_padding = nn.Parameter(
+            torch.randn(self.text_len + self.text_len_t5, self.text_states_dim, dtype=torch.float32))
+
         # Attention pooling
         pooler_out_dim = 1024
         # clip모델로 돌릴경우 주석 x / bert 모델로 돌릴경우 주석 o
         # self.text_states_dim = 768  # Update to match input tensor if fixed
-        self.pooler = AttentionPool(self.text_len, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
-        # self.pooler = AttentionPool(77, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
-
+        self.pooler = AttentionPool(self.text_len_t5, self.text_states_dim_t5, num_heads=8, output_dim=pooler_out_dim)
 
         # Dimension of the extra input vectors
         self.extra_in_dim = pooler_out_dim
@@ -290,9 +299,10 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
                 t,
                 encoder_hidden_states=None,
                 text_embedding_mask=None,
+                encoder_hidden_states_t5=None,
+                text_embedding_mask_t5=None,
                 image_meta_size=None,
                 style=None,
-                # metadata=None,  # Add metadata as input
                 cos_cis_img=None,
                 sin_cis_img=None,
                 return_dict=True,
@@ -311,6 +321,10 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
             CLIP text embedding, (B, L_clip, D)
         text_embedding_mask: torch.Tensor
             CLIP text embedding mask, (B, L_clip)
+        encoder_hidden_states_t5: torch.Tensor
+            T5 text embedding, (B, L_t5, D)
+        text_embedding_mask_t5: torch.Tensor
+            T5 text embedding mask, (B, L_t5)
         image_meta_size: torch.Tensor
             (B, 6)
         style: torch.Tensor
@@ -320,8 +334,17 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
         return_dict: bool
             Whether to return a dictionary.
         """
-        text_states = encoder_hidden_states  # CLIP text embedding      # 2,77,1024
-        text_states_mask = text_embedding_mask.bool()                   # 2,77
+        text_states = encoder_hidden_states                     # 2,77,1024
+        text_states_t5 = encoder_hidden_states_t5               # 2,256,4096
+        text_states_mask = text_embedding_mask.bool()           # 2,77
+        text_states_t5_mask = text_embedding_mask_t5.bool()     # 2,256
+        b_t5, l_t5, c_t5 = text_states_t5.shape
+        text_states_t5 = self.mlp_t5(text_states_t5.view(-1, c_t5))
+        text_states = torch.cat([text_states, text_states_t5.view(b_t5, l_t5, -1)], dim=1)  # 2,205，1024
+        clip_t5_mask = torch.cat([text_states_mask, text_states_t5_mask], dim=-1)
+
+        clip_t5_mask = clip_t5_mask
+        text_states = torch.where(clip_t5_mask.unsqueeze(2), text_states, self.text_embedding_padding.to(text_states))
 
         _, _, oh, ow = x.shape
         th, tw = oh // self.patch_size, ow // self.patch_size
@@ -335,12 +358,11 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
 
         # ========================= Concatenate all extra vectors =========================
         # Build text tokens with pooling
-        extra_vec = self.pooler(encoder_hidden_states)
+        extra_vec = self.pooler(encoder_hidden_states_t5)
 
-        if self.args.size_cond is None:
+        if self.args.size_cond == None:
             image_meta_size = None
         self.check_condition_validation(image_meta_size, style)
-
         # Build image meta size tokens if applicable
         if image_meta_size is not None:
             image_meta_size = timestep_embedding(image_meta_size.view(-1), 256)   # [B * 6, 256]
@@ -513,7 +535,7 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
 
 
 #################################################################################
-#                            ADGDiT Configs                                 #
+#                            ADGDiT Configs                                     #
 #################################################################################
 
 ADG_DIT_CONFIG = {

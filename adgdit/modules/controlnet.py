@@ -77,7 +77,9 @@ class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
         self.num_heads = num_heads
         self.hidden_size = hidden_size
         self.text_states_dim = args.text_states_dim
+        self.text_states_dim_t5 = args.text_states_dim_t5
         self.text_len = args.text_len
+        self.text_len_t5 = args.text_len_t5
         self.norm = args.norm
 
         use_flash_attn = args.infer_mode == 'fa' or args.use_flash_attn
@@ -85,9 +87,19 @@ class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
             log_fn(f"    Enable Flash Attention.")
         qk_norm = args.qk_norm  # See http://arxiv.org/abs/2302.05442 for details.
 
+        self.mlp_t5 = nn.Sequential(
+            nn.Linear(self.text_states_dim_t5, self.text_states_dim_t5 * 4, bias=True),
+            FP32_SiLU(),
+            nn.Linear(self.text_states_dim_t5 * 4, self.text_states_dim, bias=True),
+        )
+        # learnable replace
+        self.text_embedding_padding = nn.Parameter(
+            torch.randn(self.text_len + self.text_len_t5, self.text_states_dim, dtype=torch.float32))
+
         # Attention pooling
         pooler_out_dim = 1024
-        self.pooler = AttentionPool(self.text_len, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
+        # self.pooler = AttentionPool(self.text_len, self.text_states_dim, num_heads=8, output_dim=pooler_out_dim)
+        self.pooler = AttentionPool(self.text_len_t5, self.text_states_dim_t5, num_heads=8, output_dim=pooler_out_dim)
 
         # Dimension of the extra input vectors
         self.extra_in_dim = pooler_out_dim
@@ -114,9 +126,9 @@ class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
         num_patches = self.x_embedder.num_patches
         log_fn(f"    Number of tokens: {num_patches}")
 
-        # ADGDiT Blocks
+        # HUnYuanDiT Blocks
         self.blocks = nn.ModuleList([
-            ADGDiTBlock(hidden_size=hidden_size,
+            HunYuanDiTBlock(hidden_size=hidden_size,
                             c_emb_size=hidden_size,
                             num_heads=num_heads,
                             mlp_ratio=mlp_ratio,
@@ -137,7 +149,7 @@ class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
             [zero_module(nn.Linear(self.hidden_size, self.hidden_size)) for _ in range(len(self.blocks))]
         )
 
-        self.fix_weight_modules = ['text_embedding_padding', 'pooler', 'style_embedder', 'x_embedder', 't_embedder', 'extra_embedder']
+        self.fix_weight_modules = ['mlp_t5', 'text_embedding_padding', 'pooler', 'style_embedder', 'x_embedder', 't_embedder', 'extra_embedder']
 
     def check_condition_validation(self, image_meta_size, style):
         if self.args.size_cond is None and image_meta_size is not None:
@@ -167,7 +179,10 @@ class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
         dit: ADGDiT
             The pre-trained ADGDiT model.
         """
-        # No longer need to load mlp_t5 related weights
+
+
+        self.mlp_t5.load_state_dict(dit.mlp_t5.state_dict())
+
         self.text_embedding_padding.data = dit.text_embedding_padding.data
         self.pooler.load_state_dict(dit.pooler.state_dict())
         if self.args.use_style_cond:
@@ -180,7 +195,8 @@ class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
             block.load_state_dict(dit.blocks[i].state_dict())
 
     def set_trainable(self):
-        # Remove T5 related modules from requires_grad_ set
+
+        self.mlp_t5.requires_grad_(False)
         self.text_embedding_padding.requires_grad_(False)
         self.pooler.requires_grad_(False)
         if self.args.use_style_cond:
@@ -205,6 +221,8 @@ class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
                 condition,
                 encoder_hidden_states=None,
                 text_embedding_mask=None,
+                encoder_hidden_states_t5=None,
+                text_embedding_mask_t5=None,
                 image_meta_size=None,
                 style=None,
                 cos_cis_img=None,
@@ -224,6 +242,10 @@ class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
             CLIP text embedding, (B, L_clip, D)
         text_embedding_mask: torch.Tensor
             CLIP text embedding mask, (B, L_clip)
+        encoder_hidden_states_t5: torch.Tensor
+            T5 text embedding, (B, L_t5, D)
+        text_embedding_mask_t5: torch.Tensor
+            T5 text embedding mask, (B, L_t5)
         image_meta_size: torch.Tensor
             (B, 6)
         style: torch.Tensor
@@ -234,8 +256,15 @@ class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
             Whether to return a dictionary.
         """
         text_states = encoder_hidden_states                     # 2,77,1024
+        text_states_t5 = encoder_hidden_states_t5               # 2,256,4096
         text_states_mask = text_embedding_mask.bool()           # 2,77
-        clip_t5_mask = text_states_mask
+        text_states_t5_mask = text_embedding_mask_t5.bool()     # 2,256
+        b_t5, l_t5, c_t5 = text_states_t5.shape
+        text_states_t5 = self.mlp_t5(text_states_t5.view(-1, c_t5))
+        text_states = torch.cat([text_states, text_states_t5.view(b_t5, l_t5, -1)], dim=1)  # 2,205，1024
+        clip_t5_mask = torch.cat([text_states_mask, text_states_t5_mask], dim=-1)
+
+        clip_t5_mask = clip_t5_mask
         text_states = torch.where(clip_t5_mask.unsqueeze(2), text_states, self.text_embedding_padding.to(text_states))
 
         _, _, oh, ow = x.shape
@@ -250,7 +279,7 @@ class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
 
         # ========================= Concatenate all extra vectors =========================
         # Build text tokens with pooling
-        extra_vec = self.pooler(encoder_hidden_states)
+        extra_vec = self.pooler(encoder_hidden_states_t5)
 
         self.check_condition_validation(image_meta_size, style)
         # Build image meta size tokens if applicable

@@ -22,6 +22,7 @@ from transformers import BertModel, BertTokenizer, logging as tf_logging
 
 from adgdit.config import get_args
 from adgdit.constants import VAE_EMA_PATH, TEXT_ENCODER, TOKENIZER, T5_ENCODER
+from adgdit.modules.text_encoder import T5Embedder
 from adgdit.lr_scheduler import WarmupLR
 from adgdit.data_loader.arrow_load_stream import TextImageArrowStream
 from adgdit.diffusion import create_diffusion
@@ -140,7 +141,7 @@ def get_pose(np_img):
 def prepare_model_inputs(args, batch, device, vae, text_encoder, text_encoder_t5, freqs_cis_img):
     image, text_embedding, text_embedding_mask, text_embedding_t5, text_embedding_mask_t5, kwargs = batch
 
-    # clip & mT5 text embedding
+    # clip & T5 text embedding
     text_embedding = text_embedding.to(device)
     text_embedding_mask = text_embedding_mask.to(device)
     encoder_hidden_states = text_encoder(
@@ -341,9 +342,9 @@ def main(args):
     logger.info(f"    Loading Bert tokenizer from {TOKENIZER}")
     tokenizer = BertTokenizer.from_pretrained(TOKENIZER)
     # Setup T5 text encoder
-    from adgdit.modules.text_encoder import MT5Embedder
-    mt5_path = T5_ENCODER['MT5']
-    embedder_t5 = MT5Embedder(mt5_path, torch_dtype=T5_ENCODER['torch_dtype'], max_length=args.text_len_t5)
+
+    t5_path = T5_ENCODER['T5']
+    embedder_t5 = T5Embedder(t5_path, torch_dtype=T5_ENCODER['torch_dtype'], max_length=args.text_len_t5)
     tokenizer_t5 = embedder_t5.tokenizer
     text_encoder_t5 = embedder_t5.model
 

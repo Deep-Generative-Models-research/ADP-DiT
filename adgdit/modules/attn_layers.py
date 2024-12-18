@@ -148,7 +148,6 @@ class FlashSelfMHAModified(nn.Module):
         qkv = self.Wqkv(x)
         qkv = qkv.view(b, s, 3, self.num_heads, self.head_dim)  # [b, s, 3, h, d]
         q, k, v = qkv.unbind(dim=2) # [b, s, h, d]
-        # print(f'q shape: {q.shape}, k shape: {k.shape}, v shape: {v.shape}')
         q = self.q_norm(q).half()   # [b, s, h, d]
         k = self.k_norm(k).half()
 
