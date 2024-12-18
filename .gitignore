@@ -162,3 +162,7 @@ adgdit/ds_config.py
 log_EXP_dit_g_2_AD2/
 mydata/
 adgdit/train.sh
+ADG-DiT_G_2_AD2/
+results_ADG-DiT_XL_AD2/
+results_ADG-DiT_g_AD2/
+adgdit/ds_config.py

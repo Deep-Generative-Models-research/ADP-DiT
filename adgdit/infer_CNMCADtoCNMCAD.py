@@ -7,12 +7,12 @@ import subprocess
 from concurrent.futures import ProcessPoolExecutor
 
 # Constants
-CSV_FILE = "/mnt/ssd/ADG-DiT/dataset/AD2/csvfile/image_text.csv"
+CSV_FILE = "/workspace/dataset/AD2/csvfile/image_text.csv"
 NEGATIVE = "low quality, blurry, distorted anatomy, extra artifacts, non-medical objects, unrelated symbols, missing brain regions, incorrect contrast, cartoonish, noise, grainy patches"
-DIT_WEIGHT = "/mnt/ssd/ADG-DiT/ADG-DiT_XL_2_AD2/001-dit_XL_2/checkpoints/e2400.pt"
+DIT_WEIGHT = "/workspace/ADG-DiT_G_2_AD2/001-dit_g_2/checkpoints/e1900.pt"
 LOAD_KEY = "module"
-MODEL = "DiT-XL/2"
-IMAGE_ROOT = "/mnt/ssd/ADG-DiT"
+MODEL = "DiT-g/2"
+IMAGE_ROOT = "/workspace/"
 CONDITION_FOLDER_MAP = {
     "Alzheimer Disease": "ADtoAD",
     "Cognitive Normal": "CNtoCN",
@@ -99,7 +99,7 @@ def extract_target_path(image_path, all_image_prompts):
 
 def run_single_inference(command):
     env = os.environ.copy()
-    env["CUDA_VISIBLE_DEVICES"] = "0"
+    env["CUDA_VISIBLE_DEVICES"] = "1"
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True, env=env)
         return result
@@ -122,11 +122,11 @@ def run_experiment(image_path, prompt, target_path, target_prompt, condition):
         with open(csv_file_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
             # Updated CSV header: Removed 'input_text', renamed 'target_prompt' to 'prompt'
-            writer.writerow(['input_image_path', 'output_image_path', 'target_image_path', 'prompt'])
+            writer.writerow(['input_image_path','prompt', 'output_image_path', 'target_image_path'])
 
-    cfg_scales = range(6, 11)
+    # cfg_scales = range(6, 11)
     # cfg_scales = range(6, 9)
-    # cfg_scales = range(9, 11)
+    cfg_scales = range(9, 11)
     infer_steps_list = range(100, 101, 1)
 
     max_workers = len(cfg_scales) * len(infer_steps_list)
@@ -135,7 +135,7 @@ def run_experiment(image_path, prompt, target_path, target_prompt, condition):
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         for cfg_scale in cfg_scales:
             for infer_steps in infer_steps_list:
-                output_img_path = os.path.join(output_dir, f"output_cfg{cfg_scale}_steps{infer_steps}.png")
+                output_img_path = os.path.join(output_dir, f"output_cfg{cfg_scale}.0_steps{infer_steps}_idx0.png")
 
                 log_message = (
                     f"\n{'='*50}\n"
