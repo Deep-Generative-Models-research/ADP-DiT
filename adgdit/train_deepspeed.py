@@ -58,7 +58,7 @@ def deepspeed_initialize(args, logger, model, opt, deepspeed_config):
     )
     return model, opt, scheduler
 
-def save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='step'):
+def save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='step', is_best=False):
     def save_lora_weight(checkpoint_dir, client_state, tag=f"{train_steps:07d}.pt"):
         cur_ckpt_save_dir = f"{checkpoint_dir}/{tag}"
         if rank == 0:
@@ -103,8 +103,13 @@ def save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoi
     elif by == 'final':
         tag = "final.pt"
         dst_paths.append(save_model_weight(client_state, tag))
+    elif by == 'best' and is_best:
+        # best 모델 저장용 태그
+        tag = "best.pt"
+        dst_paths.append(save_model_weight(client_state, tag))
     else:
-        raise ValueError(f"Unknown save checkpoint method: {by}")
+        if by not in ['epoch', 'step', 'final', 'best']:
+            raise ValueError(f"Unknown save checkpoint method: {by}")
 
     saved = any([state for state, _ in dst_paths])
     if not saved:
@@ -115,9 +120,10 @@ def save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoi
         dist.barrier()
         if rank == 0 and len(dst_paths) > 0:
             # Delete optimizer states to avoid occupying too much disk space.
-            for dst_path in dst_paths:
-                for opt_state_path in glob(f"{dst_path}/zero_*_optim_states.pt"):
-                    os.remove(opt_state_path)
+            for state, dst_path in dst_paths:
+                if state:
+                    for opt_state_path in glob(f"{dst_path}/zero_*_optim_states.pt"):
+                        os.remove(opt_state_path)
 
     return True
 
@@ -283,8 +289,7 @@ def main(args):
                                       hidden_size=model.hidden_size,
                                       num_heads=model.num_heads,
                                       log_fn=logger.info,
-                                      rope_real=args.rope_real,
-                                      )
+                                      rope_real=args.rope_real)
 
     # Create EMA model and convert to fp16 if needed.
     ema = None
@@ -363,8 +368,7 @@ def main(args):
                                    tokenizer=tokenizer,
                                    uncond_p_t5=args.uncond_p_t5,
                                    text_ctx_len_t5=args.text_len_t5,
-                                   tokenizer_t5=tokenizer_t5,
-                                   )
+                                   tokenizer_t5=tokenizer_t5)
     if args.multireso:
         sampler = BlockDistributedSampler(dataset, num_replicas=world_size, rank=rank, seed=args.global_seed,
                                           shuffle=False, drop_last=True, batch_size=batch_size)
@@ -460,6 +464,8 @@ def main(args):
     log_steps = 0
     running_loss = 0
     start_time = time.time()
+    best_loss = float('inf')
+    best_checkpoint_path = None
 
     # Training loop
     epoch = start_epoch
@@ -480,6 +486,8 @@ def main(args):
                 start_epoch_step = 0
                 logger.info(f"      Iters left this epoch: {len(loader):,}")
 
+        epoch_loss_sum = 0.0
+        epoch_steps = 0
         logger.info(f"    Beginning epoch {epoch}...")
         for batch in loader:
             latents, model_kwargs = prepare_model_inputs(args, batch, device, vae, text_encoder, text_encoder_t5, freqs_cis_img)
@@ -502,6 +510,8 @@ def main(args):
             running_loss += loss.item()
             log_steps += 1
             train_steps += 1
+            epoch_loss_sum += loss.item()
+            epoch_steps += 1
 
             if  rank == 0 and train_steps % args.log_every == 0:
                 # Ensure synchronization across GPUs before timing/logging
@@ -559,9 +569,22 @@ def main(args):
         if rank == 0:
             writer.add_scalar('Epoch/train', epoch, train_steps)
 
-        # Finish an epoch
+        # Epoch 종료 후 평균 loss 계산
+        avg_epoch_loss = epoch_loss_sum / epoch_steps if epoch_steps > 0 else float('inf')
+
         if args.ckpt_every_n_epoch > 0 and epoch % args.ckpt_every_n_epoch == 0:
+            # epoch 단위 체크포인트 저장
             save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='epoch')
+            # best 모델 갱신 여부 확인
+            if avg_epoch_loss < best_loss:
+                # 기존 best 체크포인트 삭제
+                if best_checkpoint_path is not None and os.path.exists(best_checkpoint_path):
+                    if rank == 0:
+                        logger.info(f"Removing old best checkpoint: {best_checkpoint_path}")
+                        os.remove(best_checkpoint_path)
+                best_loss = avg_epoch_loss
+                save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='best', is_best=True)
+                best_checkpoint_path = os.path.join(checkpoint_dir, "best.pt")
 
         epoch += 1
 
