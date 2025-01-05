@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import os
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.io import imread
@@ -9,7 +10,6 @@ from scipy.linalg import sqrtm
 from torchvision import models
 import torch
 from torchvision.transforms import ToTensor, Resize
-import os
 
 # FID 계산용 클래스
 class FIDCalculator:
@@ -100,51 +100,56 @@ def calculate_metrics_ssim_mse(output_img, target_img, resize_dim=(256, 256)):
 
 # 이미지 전처리 함수 for FID
 def preprocess_image_fid(img_path, img_size=299):
+    from skimage.io import imread
+    from skimage.transform import resize
+    from skimage.color import gray2rgb
+
     img = imread(img_path)
     if img.ndim == 2:
         img = gray2rgb(img)
     img = resize(img, (img_size, img_size), anti_aliasing=True)
+
+    from torchvision.transforms import ToTensor
     img_tensor = ToTensor()(img).unsqueeze(0)  # Tensor 변환 및 배치 추가
     return img_tensor
 
-# 메인 평가 함수
 def evaluate_images():
+    """
+    이 함수는 /mnt/ssd/ADG-DiT/results/XXX/results.csv 에서 데이터를 읽고,
+    (동일 input_path 중) SSIM이 가장 큰 결과만 골라 FID, 메트릭을 계산합니다.
+    최종 결과는 /mnt/ssd/ADG-DiT/results/evaluation/{dataset}/{dataset}_best_results.csv 형태로 저장하고,
+    평균값은 /mnt/ssd/ADG-DiT/results/evaluation/evaluate.csv 에 누적 기록합니다.
+    """
     # 여러 CSV 파일 경로 정의
     evaluations = [
         {
             "dataset": "ADtoAD",
-            "input_csv": "/home/juneyonglee/Desktop/ADG-DiT/results/ADtoAD/results.csv",
-            "output_csv": "/home/juneyonglee/Desktop/ADG-DiT/metrics/results_ADtoAD.csv"
+            "input_csv": "/mnt/ssd/ADG-DiT/results/ADtoAD/results.csv",
         },
         {
             "dataset": "MCtoMC",
-            "input_csv": "/home/juneyonglee/Desktop/ADG-DiT/results/MCtoMC/results.csv",
-            "output_csv": "/home/juneyonglee/Desktop/ADG-DiT/metrics/results_MCtoMC.csv"
+            "input_csv": "/mnt/ssd/ADG-DiT/results/MCtoMC/results.csv",
         },
         {
             "dataset": "CNtoCN",
-            "input_csv": "/home/juneyonglee/Desktop/ADG-DiT/results/CNtoCN/results.csv",
-            "output_csv": "/home/juneyonglee/Desktop/ADG-DiT/metrics/results_CNtoCN.csv"
+            "input_csv": "/mnt/ssd/ADG-DiT/results/CNtoCN/results.csv",
         }
     ]
 
-    # 평가 요약을 저장할 CSV 파일 경로
-    summary_csv_path = "/home/juneyonglee/Desktop/ADG-DiT/metrics/evaluate.csv"
+    # 최종 평가 요약을 저장할 CSV 파일 경로
+    # => /mnt/ssd/ADG-DiT/results/evaluation/evaluate.csv
+    evaluation_root = "/mnt/ssd/ADG-DiT/results/evaluation"
+    summary_csv_path = os.path.join(evaluation_root, "evaluate.csv")
 
     # FID 계산기 초기화
     fid_calculator = FIDCalculator()
 
-    # 요약 결과 저장용 리스트
-    summary_results = []
-
-    for eval in evaluations:
-        dataset = eval["dataset"]
-        input_csv = eval["input_csv"]
-        output_csv = eval["output_csv"]
+    for eval_ in evaluations:
+        dataset = eval_["dataset"]
+        input_csv = eval_["input_csv"]
 
         print(f"\n===== Processing Dataset: {dataset} =====")
         print(f"Input CSV: {input_csv}")
-        print(f"Output CSV: {output_csv}")
 
         # CSV 파일 읽기 (필요한 열만 읽기)
         required_columns = ['input_image_path', 'output_image_path', 'target_image_path', 'prompt']
@@ -152,14 +157,7 @@ def evaluate_images():
             df = pd.read_csv(input_csv, usecols=required_columns, skipinitialspace=True)
         except FileNotFoundError:
             print(f"입력 CSV 파일이 존재하지 않습니다: {input_csv}")
-            # 빈 CSV 파일 생성 (옵션)
-            create_empty_csv = False  # True로 설정하면 빈 CSV 파일을 생성합니다.
-            if create_empty_csv:
-                df = pd.DataFrame(columns=required_columns)
-                df.to_csv(input_csv, index=False)
-                print(f"빈 입력 CSV 파일이 생성되었습니다: {input_csv}")
-            else:
-                continue
+            continue
         except ValueError as ve:
             print(f"입력 CSV 파일에 필요한 열이 없습니다: {ve}")
             continue
@@ -170,30 +168,25 @@ def evaluate_images():
         # 열 이름 공백 제거
         df.columns = df.columns.str.strip()
 
-        # 열 이름 확인
-        print("CSV 열 이름:", df.columns.tolist())
-
         # 데이터의 첫 몇 행을 출력하여 확인
+        print("CSV 열 이름:", df.columns.tolist())
         print("CSV 데이터 샘플:")
         print(df.head())
 
-        # 결과 저장용 리스트
-        results = []
-
-        # FID 계산용 Feature 저장
-        target_features = []
-        output_features = []
+        # -----------------------------
+        # (1) 모든 결과를 임시로 저장할 리스트
+        # -----------------------------
+        all_results = []
 
         for idx, row in df.iterrows():
-            # 원본 경로 추출
             input_path_original = row['input_image_path']
             output_path_original = row['output_image_path']
             target_path_original = row['target_image_path']
-            prompt = row['prompt']  # prompt 추출
+            prompt = row['prompt']
 
-            # 절대 경로인지 상대 경로인지 확인 후 변환
+            # /workspace/ => /mnt/ssd/ADG-DiT/ 로 치환 (절대경로 변환)
             original_base_path = '/workspace'
-            new_base_path = '/home/juneyonglee/Desktop/ADG-DiT'
+            new_base_path = '/mnt/ssd/ADG-DiT'
 
             if os.path.isabs(input_path_original):
                 input_path = input_path_original.replace(original_base_path, new_base_path)
@@ -210,12 +203,11 @@ def evaluate_images():
             else:
                 target_path = os.path.join(new_base_path, target_path_original)
 
-            # 절대 경로 정규화
+            # 경로 정규화
             input_path = os.path.normpath(input_path)
             output_path = os.path.normpath(output_path)
             target_path = os.path.normpath(target_path)
 
-            # 디버깅 정보 출력
             print(f"\nProcessing row {idx}:")
             print(f"Input path: {input_path}")
             print(f"Output path: {output_path}")
@@ -223,129 +215,121 @@ def evaluate_images():
             print(f"Prompt: {prompt}")
 
             # 이미지 파일 존재 여부 확인
-            missing = False
-            if not os.path.exists(input_path):
-                print(f"Input image not found: {input_path}")
-                missing = True
-            if not os.path.exists(output_path):
-                print(f"Output image not found: {output_path}")
-                missing = True
-            if not os.path.exists(target_path):
-                print(f"Target image not found: {target_path}")
-                missing = True
-            if missing:
-                continue  # 누락된 파일이 있는 경우 현재 행을 건너뜀
+            if (not os.path.exists(input_path) or
+                not os.path.exists(output_path) or
+                not os.path.exists(target_path)):
+                print("이미지 파일이 누락되어 현재 행을 건너뜁니다.")
+                continue
 
             try:
-                # SSIM, MSE & PSNR을 위한 이미지 읽기 (원본 크기 유지)
+                # SSIM, MSE & PSNR 계산용
                 output_img = imread(output_path)
                 target_img = imread(target_path)
 
-                # SSIM, MSE & PSNR 계산
                 ssim_val, mse_val, psnr_val = calculate_metrics_ssim_mse(output_img, target_img)
 
-                # FID 계산을 위한 Feature 추출 (299x299)
+                # FID feature
                 target_tensor = preprocess_image_fid(target_path)
                 output_tensor = preprocess_image_fid(output_path)
+                target_feature = fid_calculator.calculate_features(target_tensor)
+                output_feature = fid_calculator.calculate_features(output_tensor)
 
-                target_features.append(fid_calculator.calculate_features(target_tensor))
-                output_features.append(fid_calculator.calculate_features(output_tensor))
-
-                # 결과 저장
-                results.append({
+                all_results.append({
                     "input_path": input_path,
                     "output_path": output_path,
                     "target_path": target_path,
-                    "prompt": prompt,  # prompt 추가
+                    "prompt": prompt,
                     "SSIM": ssim_val,
                     "MSE": mse_val,
-                    "PSNR": psnr_val
+                    "PSNR": psnr_val,
+                    "target_feature": target_feature,
+                    "output_feature": output_feature
                 })
+
             except Exception as e:
                 print(f"Error processing row {idx}: {e}")
                 continue
 
-        if len(target_features) == 0 or len(output_features) == 0:
-            print("FID 계산을 위한 유효한 이미지가 없습니다.")
+        if not all_results:
+            print(f"{dataset}: 유효한 결과가 없어 FID 계산을 건너뜁니다.")
             continue
 
-        # FID 계산
-        target_features = np.vstack(target_features)
-        output_features = np.vstack(output_features)
-        fid_val = fid_calculator.calculate_fid(target_features, output_features)
+        all_results_df = pd.DataFrame(all_results)
 
-        # 결과를 DataFrame으로 저장
-        results_df = pd.DataFrame(results)
-        results_df['FID'] = fid_val  # 동일 FID 값 적용
+        # 동일 input_path 그룹 중 SSIM 가장 큰 것 선택
+        best_results_df = (
+            all_results_df.sort_values(by="SSIM", ascending=False)
+                          .groupby("input_path", as_index=False)
+                          .head(1)
+        )
 
-        # 평균값 계산
-        mean_values = results_df[['SSIM', 'MSE', 'PSNR']].mean().to_dict()
-        mean_values['FID'] = fid_val
-        mean_values['Dataset'] = dataset  # 어떤 데이터셋인지 추가
-        print("\n평균값:", mean_values)
+        # 골라낸 행으로 FID 계산
+        best_target_features = np.vstack(best_results_df["target_feature"])
+        best_output_features = np.vstack(best_results_df["output_feature"])
+        fid_val = fid_calculator.calculate_fid(best_target_features, best_output_features)
 
-        # 결과 CSV 저장 (덮어쓰지 않고 추가)
-        try:
-            # Output directory 생성
-            output_dir = os.path.dirname(output_csv)
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-                print(f"Output directory created: {output_dir}")
+        # 공통 FID 열
+        best_results_df["FID"] = fid_val
 
-            # 파일이 존재하는지 확인
-            if os.path.exists(output_csv):
-                # 파일이 존재하면 헤더 없이 추가
-                results_df[['input_path', 'output_path', 'target_path', 'prompt', 'SSIM', 'MSE', 'PSNR', 'FID']].to_csv(
-                    output_csv, mode='a', index=False, header=False
-                )
-                print(f"결과가 기존 CSV 파일에 추가되었습니다: {output_csv}")
-            else:
-                # 파일이 존재하지 않으면 새로 생성하고 헤더 포함
-                results_df[['input_path', 'output_path', 'target_path', 'prompt', 'SSIM', 'MSE', 'PSNR', 'FID']].to_csv(
-                    output_csv, mode='w', index=False, header=True
-                )
-                print(f"결과가 새 CSV 파일으로 저장되었습니다: {output_csv}")
-        except Exception as e:
-            print(f"결과 CSV 파일을 저장하는 중 오류가 발생했습니다: {e}")
+        mean_values = {
+            "SSIM": best_results_df["SSIM"].mean(),
+            "MSE":  best_results_df["MSE"].mean(),
+            "PSNR": best_results_df["PSNR"].mean(),
+            "FID":  fid_val,
+            "Dataset": dataset
+        }
+        print("\n베스트 결과 기준 평균값:", mean_values)
 
-        # **평균값을 evaluate.csv에 추가**
-        try:
-            # 출력 디렉터리 추출
-            eval_output_dir = os.path.dirname(summary_csv_path)
-            if not os.path.exists(eval_output_dir):
-                os.makedirs(eval_output_dir)
-                print(f"Output directory for summary created: {eval_output_dir}")
+        # ---------------------------
+        # (2) 결과 CSV 저장
+        # => /mnt/ssd/ADG-DiT/results/evaluation/{dataset}/{dataset}_best_results.csv
+        # ---------------------------
+        dataset_dir = os.path.join(evaluation_root, dataset)
+        if not os.path.exists(dataset_dir):
+            os.makedirs(dataset_dir)
+            print(f"결과 저장 디렉터리 생성: {dataset_dir}")
 
-            # 평가 요약을 담을 DataFrame 생성
-            summary_df = pd.DataFrame([{
-                "Dataset": mean_values.get("Dataset", dataset),
-                "SSIM": mean_values.get("SSIM"),
-                "MSE": mean_values.get("MSE"),
-                "PSNR": mean_values.get("PSNR"),
-                "FID": mean_values.get("FID")
-            }])
+        best_csv_path = os.path.join(dataset_dir, f"{dataset}_best_results.csv")
 
-            # 평가 요약 CSV 파일 저장 (덮어쓰지 않고 추가)
-            if os.path.exists(summary_csv_path):
-                # 'Dataset'을 첫 번째 열로 재배치
-                if 'Dataset' in summary_df.columns:
-                    columns = ['Dataset'] + [col for col in summary_df.columns if col != 'Dataset']
-                    summary_df = summary_df[columns]
-                summary_df.to_csv(
-                    summary_csv_path, mode='a', index=False, header=False
-                )
-                print(f"평균값이 기존 평가 CSV 파일에 추가되었습니다: {summary_csv_path}")
-            else:
-                # 'Dataset'을 첫 번째 열로 재배치
-                if 'Dataset' in summary_df.columns:
-                    columns = ['Dataset'] + [col for col in summary_df.columns if col != 'Dataset']
-                    summary_df = summary_df[columns]
-                summary_df.to_csv(
-                    summary_csv_path, mode='w', index=False, header=True
-                )
-                print(f"평균값이 새 평가 CSV 파일으로 저장되었습니다: {summary_csv_path}")
-        except Exception as e:
-            print(f"평균값 CSV 파일을 저장하는 중 오류가 발생했습니다: {e}")
+        # 저장할 컬럼
+        columns_to_save = [
+            "input_path", "output_path", "target_path", "prompt",
+            "SSIM", "MSE", "PSNR", "FID"
+        ]
+        best_save_df = best_results_df[columns_to_save].copy()
+
+        # CSV에 이어서 기록(Append)
+        if os.path.exists(best_csv_path):
+            best_save_df.to_csv(best_csv_path, mode='a', index=False, header=False)
+            print(f"베스트 결과가 기존 CSV 파일에 추가되었습니다: {best_csv_path}")
+        else:
+            best_save_df.to_csv(best_csv_path, mode='w', index=False, header=True)
+            print(f"베스트 결과가 새 CSV 파일로 저장되었습니다: {best_csv_path}")
+
+        # ---------------------------
+        # (3) /mnt/ssd/ADG-DiT/results/evaluation/evaluate.csv 에 평균값 추가
+        # ---------------------------
+        summary_df = pd.DataFrame([{
+            "Dataset": mean_values["Dataset"],
+            "SSIM": mean_values["SSIM"],
+            "MSE": mean_values["MSE"],
+            "PSNR": mean_values["PSNR"],
+            "FID": mean_values["FID"]
+        }])
+
+        if not os.path.exists(evaluation_root):
+            os.makedirs(evaluation_root)
+
+        if os.path.exists(summary_csv_path):
+            cols = ["Dataset"] + [c for c in summary_df.columns if c != "Dataset"]
+            summary_df = summary_df[cols]
+            summary_df.to_csv(summary_csv_path, mode='a', index=False, header=False)
+            print(f"평균값이 기존 평가 CSV 파일에 추가되었습니다: {summary_csv_path}")
+        else:
+            cols = ["Dataset"] + [c for c in summary_df.columns if c != "Dataset"]
+            summary_df = summary_df[cols]
+            summary_df.to_csv(summary_csv_path, mode='w', index=False, header=True)
+            print(f"평균값이 새 평가 CSV 파일로 저장되었습니다: {summary_csv_path}")
 
 if __name__ == "__main__":
     evaluate_images()

@@ -165,4 +165,9 @@ adgdit/train.sh
 ADG-DiT_G_2_AD2/
 results_ADG-DiT_XL_AD2/
 results_ADG-DiT_g_AD2/
-adgdit/ds_config.py
+ADG-DiT_XL_2_AD2
+results(_ADG-DiT_g_2_AD2)
+results(_ADG-DiT_g_2_T5_AD2)
+results(_ADG-DiT_g_2_T5&aug_AD2)_3000epoch
+ADG-DiT_G_2_AD2_aug/
+

@@ -7,12 +7,12 @@ import subprocess
 from concurrent.futures import ProcessPoolExecutor
 
 # Constants
-CSV_FILE = "/workspace/dataset/AD2/csvfile/image_text.csv"
+CSV_FILE = "/mnt/ssd/ADG-DiT/dataset/AD2/csvfile/image_text.csv"
 NEGATIVE = "low quality, blurry, distorted anatomy, extra artifacts, non-medical objects, unrelated symbols, missing brain regions, incorrect contrast, cartoonish, noise, grainy patches"
-DIT_WEIGHT = "/workspace/ADG-DiT_G_2_AD2/001-dit_g_2/checkpoints/e1900.pt"
+DIT_WEIGHT = "/mnt/ssd/ADG-DiT/ADG-DiT_G_2_AD2_aug/log_EXP_dit_g_2_AD2/001-dit_g_2/checkpoints/final.pt"
 LOAD_KEY = "module"
 MODEL = "DiT-g/2"
-IMAGE_ROOT = "/workspace/"
+IMAGE_ROOT = "/mnt/ssd/ADG-DiT/"
 CONDITION_FOLDER_MAP = {
     "Alzheimer Disease": "ADtoAD",
     "Cognitive Normal": "CNtoCN",
@@ -97,9 +97,9 @@ def extract_target_path(image_path, all_image_prompts):
         return None, None
 
 
-def run_single_inference(command):
+def run_single_inference(command, gpu_id):
     env = os.environ.copy()
-    env["CUDA_VISIBLE_DEVICES"] = "1"
+    env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)  # GPU ID�� �Ҵ�
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True, env=env)
         return result
@@ -121,30 +121,29 @@ def run_experiment(image_path, prompt, target_path, target_prompt, condition):
     if not os.path.isfile(csv_file_path):
         with open(csv_file_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
-            # Updated CSV header: Removed 'input_text', renamed 'target_prompt' to 'prompt'
-            writer.writerow(['input_image_path','prompt', 'output_image_path', 'target_image_path'])
+            writer.writerow(['input_image_path', 'prompt', 'output_image_path', 'target_image_path'])
 
-    # cfg_scales = range(6, 11)
-    # cfg_scales = range(6, 9)
-    cfg_scales = range(9, 11)
+    # GPU �Ҵ�: cfg_scale���� GPU ID �л�
+    cfg_scales = [1, 2, 3, 4, 5, 6, 7, 8]
     infer_steps_list = range(100, 101, 1)
+    gpu_ids = list(range(8))  # GPU 0~7 ���
 
-    max_workers = len(cfg_scales) * len(infer_steps_list)
     tasks = []
 
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        for cfg_scale in cfg_scales:
+    with ProcessPoolExecutor(max_workers=len(cfg_scales)) as executor:
+        for i, cfg_scale in enumerate(cfg_scales):
             for infer_steps in infer_steps_list:
+                gpu_id = gpu_ids[i % len(gpu_ids)]  # GPU ID ��ȯ �Ҵ�
                 output_img_path = os.path.join(output_dir, f"output_cfg{cfg_scale}.0_steps{infer_steps}_idx0.png")
 
                 log_message = (
                     f"\n{'='*50}\n"
                     f"Condition: {condition}\n"
                     f"Image Path: {image_path}\n"
-                    f"Prompt: {target_prompt}\n"  # Renamed to 'Prompt: target_prompt'
+                    f"Prompt: {target_prompt}\n"
                     f"Output Image Path: {output_img_path}\n"
                     f"Target Image Path: {target_path}\n"
-                    f"Running experiment with --cfg-scale={cfg_scale} and --infer-steps={infer_steps} on single GPU\n"
+                    f"Running experiment with --cfg-scale={cfg_scale}, --infer-steps={infer_steps} on GPU {gpu_id}\n"
                     f"{'='*50}\n"
                 )
 
@@ -156,7 +155,7 @@ def run_experiment(image_path, prompt, target_path, target_prompt, condition):
                     "python", "sample_t2i.py",
                     "--infer-mode", "fa",
                     "--model", MODEL,
-                    "--prompt", target_prompt,  # Use target_prompt as the prompt
+                    "--prompt", target_prompt,
                     "--negative", NEGATIVE,
                     "--image-path", image_path,
                     "--no-enhance",
@@ -167,16 +166,13 @@ def run_experiment(image_path, prompt, target_path, target_prompt, condition):
                     "--results-dir", output_dir
                 ]
 
-                future = executor.submit(run_single_inference, command)
-                # Attach metadata to the future for later reference
+                future = executor.submit(run_single_inference, command, gpu_id)
                 future.cfg_scale = cfg_scale
                 future.infer_steps = infer_steps
                 future.image_path = image_path
-                # future.prompt = prompt  # Original prompt removed
-                future.prompt = target_prompt  # Use target_prompt as 'prompt'
+                future.prompt = target_prompt
                 future.output_img_path = output_img_path
                 future.target_path = target_path
-                future.target_prompt = target_prompt
                 tasks.append(future)
 
         for future in tasks:
@@ -184,8 +180,7 @@ def run_experiment(image_path, prompt, target_path, target_prompt, condition):
                 future.result()
                 with open(csv_file_path, 'a', newline='', encoding='utf-8') as csvfile:
                     writer = csv.writer(csvfile)
-                    # Updated CSV writing: Remove original 'prompt', use 'target_prompt' as 'prompt'
-                    writer.writerow([future.image_path,future.target_prompt, future.output_img_path, future.target_path ])
+                    writer.writerow([future.image_path, future.prompt, future.output_img_path, future.target_path])
                 print(f"Experiment with --cfg-scale={future.cfg_scale} and --infer-steps={future.infer_steps} completed successfully.")
             except Exception as e:
                 with open(log_file_path, 'a', encoding='utf-8') as log_file:
