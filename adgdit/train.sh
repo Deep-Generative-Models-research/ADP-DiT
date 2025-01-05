@@ -13,12 +13,12 @@ results_dir=./log_EXP_dit_g_2_AD2               # Save root for results
 batch_size=16                                        # Training batch size
 image_size=256                                       # Training image resolution
 grad_accu_steps=2                                    # Gradient accumulation
-warmup_num_steps=1425                                  # Warm-up steps
 lr=0.0001                                            # Learning rate
 ckpt_every=9999999                                   # Create a ckpt every a few steps.
 ckpt_latest_every=9999999                            # Create a ckpt named `latest.pt` every a few steps.
 ckpt_every_n_epoch=100                               # Create a ckpt every a few epochs.
 epochs=3000                                          # Total training epochs
+warmup_num_steps=1425                                  # Warm-up steps
 t_max=5700                                            # Steps per cosine cycle
 eta_min=1e-5                                         # Minimum learning rate during decay
 t_mult=2.0                                           # Multiplier for each cycle
@@ -77,3 +77,13 @@ sh $(dirname "$0")/run_g.sh \
     # --warmup-num-steps ${warmup_num_steps} \
     # --lr_schedule WarmupDecayLR \                    # Specify the scheduler
     # --total-num-steps ${total_steps} \                # Total number of steps for warmup and decay
+
+# GPU 1장:
+# 전체 update step = 337,500
+# t_max=5700, warmup_steps=1425
+# cycle_ratio = 5700 / 337,500 ≈ 0.0169
+# warmup_ratio = 1425 / 337,500 ≈ 0.00422
+# GPU 2장:
+# 전체 update step = 84,000
+# t_max_2 = 0.0169 × 84,000 ≈ 1420
+# warmup_steps_2 = 0.00422 × 84,000 ≈ 350
