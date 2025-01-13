@@ -4,6 +4,7 @@ import os
 import random
 import sys
 import time
+import shutil  # 추가
 from functools import partial
 from glob import glob
 
@@ -32,20 +33,20 @@ from adgdit.modules.models import ADG_DIT_MODELS, ADGDiT
 from adgdit.modules.posemb_layers import init_image_posemb
 from adgdit.utils.tools import create_exp_folder, model_resume, get_trainable_params
 
+
 def deepspeed_initialize(args, logger, model, opt, deepspeed_config):
     logger.info(f"Initialize deepspeed...")
     logger.info(f"    Using deepspeed optimizer")
 
     def get_learning_rate_scheduler(optimizer):
-        """Use CosineAnnealingWarmupRestarts for the scheduler"""
         return CosineAnnealingWarmupRestarts(
             optimizer=optimizer,
-            first_cycle_steps=args.t_max,  # total steps for first cosine cycle
-            cycle_mult=args.t_mult,       # multiplier for each cycle's duration
-            max_lr=args.max_lr,          # maximum learning rate
-            min_lr=args.min_lr,          # minimum learning rate
-            warmup_steps=args.warmup_steps,  # warmup steps before cosine decay starts
-            gamma=args.gamma            # decay factor for max_lr on each restart
+            first_cycle_steps=args.t_max,
+            cycle_mult=args.t_mult,
+            max_lr=args.max_lr,
+            min_lr=args.min_lr,
+            warmup_steps=args.warmup_steps,
+            gamma=args.gamma
         )
 
     logger.info(f"    Building scheduler with first_cycle_steps={args.t_max}, cycle_mult={args.t_mult}, warmup_steps={args.warmup_steps}")
@@ -57,6 +58,7 @@ def deepspeed_initialize(args, logger, model, opt, deepspeed_config):
         lr_scheduler=partial(get_learning_rate_scheduler)
     )
     return model, opt, scheduler
+
 
 def save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='step', is_best=False):
     def save_lora_weight(checkpoint_dir, client_state, tag=f"{train_steps:07d}.pt"):
@@ -104,7 +106,6 @@ def save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoi
         tag = "final.pt"
         dst_paths.append(save_model_weight(client_state, tag))
     elif by == 'best' and is_best:
-        # best 모델 저장용 태그
         tag = "best.pt"
         dst_paths.append(save_model_weight(client_state, tag))
     else:
@@ -141,6 +142,7 @@ def prepare_model_inputs(args, batch, device, vae, text_encoder, text_encoder_t5
     )[0]
     text_embedding_t5 = text_embedding_t5.to(device).squeeze(1)
     text_embedding_mask_t5 = text_embedding_mask_t5.to(device).squeeze(1)
+
     with torch.no_grad():
         output_t5 = text_encoder_t5(
             input_ids=text_embedding_t5,
@@ -149,7 +151,6 @@ def prepare_model_inputs(args, batch, device, vae, text_encoder, text_encoder_t5
         )
         encoder_hidden_states_t5 = output_t5['hidden_states'][T5_ENCODER['layer_index']].detach()
 
-    # additional condition
     if args.size_cond:
         image_meta_size = kwargs['image_meta_size'].to(device)
     else:
@@ -162,7 +163,6 @@ def prepare_model_inputs(args, batch, device, vae, text_encoder, text_encoder_t5
     if args.extra_fp16:
         image = image.half()
 
-    # Map input images to latent space + normalize latents:
     image = image.to(device)
     vae_scaling_factor = vae.config.scaling_factor
     latents = vae.encode(image).latent_dist.sample().mul_(vae_scaling_factor)
@@ -172,17 +172,6 @@ def prepare_model_inputs(args, batch, device, vae, text_encoder, text_encoder_t5
     reso = f"{height}x{width}"
     cos_cis_img, sin_cis_img = freqs_cis_img[reso]
 
-    # # Metadata processing
-    # metadata = kwargs['metadata'].to(device)  # Assuming metadata is included in the batch
-    # metadata_embedding = metadata_embedder(metadata)  # Embed the metadata
-
-    # # Combine metadata with timestep embedding
-    # timesteps = kwargs['timesteps'].to(device)  # Assuming timesteps are included in the batch
-    # timestep_embedding = metadata_embedder.mlp_t(timestep_embedding(timesteps, metadata_embedder.frequency_embedding_size))
-    # combined_embedding = torch.cat([timestep_embedding, metadata_embedding], dim=-1)
-    # combined_embedding = metadata_embedder.proj(combined_embedding)
-
-    # Model conditions
     model_kwargs = dict(
         encoder_hidden_states=encoder_hidden_states,
         text_embedding_mask=text_embedding_mask,
@@ -223,84 +212,64 @@ def main(args):
     # Setup an experiment folder
     experiment_dir, checkpoint_dir, logger = create_exp_folder(args, rank)
 
-    # TensorBoard Writer 초기화
+    # TensorBoard Writer
     if rank == 0:
         writer = SummaryWriter(log_dir=os.path.join(experiment_dir, "tensorboard_logs"))
 
     # Log all the arguments
     logger.info(sys.argv)
     logger.info(str(args))
-    # Save to a json file
+    # Save to a json
     args_dict = vars(args)
     args_dict['world_size'] = world_size
     with open(f"{experiment_dir}/args.json", 'w') as f:
         json.dump(args_dict, f, indent=4)
 
-    # Disable the message "Some weights of the model checkpoint at ... were not used when initializing BertModel."
-    # If needed, just comment the following line.
     tf_logging.set_verbosity_error()
-
-    # ===========================================================================
-    # Building ADG-DiT
-    # ===========================================================================
 
     logger.info("Building ADG-DiT Model.")
 
-    # ---------------------------------------------------------------------------
-    #   Training sample base size, such as 256/512/1024. Notice that this size is
-    #   just a base size, not necessary the actual size of training samples. Actual
-    #   size of the training samples are correlated with `resolutions` when enabling
-    #   multi-resolution training.
-    # ---------------------------------------------------------------------------
     image_size = args.image_size
     if len(image_size) == 1:
         image_size = [image_size[0], image_size[0]]
     if len(image_size) != 2:
         raise ValueError(f"Invalid image size: {args.image_size}")
-    assert image_size[0] % 8 == 0 and image_size[1] % 8 == 0, "Image size must be divisible by 8 (for the VAE encoder). " \
-                                                              f"got {image_size}"
+    assert image_size[0] % 8 == 0 and image_size[1] % 8 == 0, "Image size must be divisible by 8"
+
     latent_size = [image_size[0] // 8, image_size[1] // 8]
 
-    # initialize model by deepspeed
     assert args.deepspeed, f"Must enable deepspeed in this script: train_deepspeed.py"
-    with deepspeed.zero.Init(data_parallel_group=torch.distributed.group.WORLD,
-                             remote_device=None if args.remote_device == 'none' else args.remote_device,
-                             config_dict_or_path=deepspeed_config,
-                             mpu=None,
-                             enabled=args.zero_stage == 3):
-        model = ADG_DIT_MODELS[args.model](args,
-                                               input_size=latent_size,
-                                               log_fn=logger.info,
-                                               )
-    # Multi-resolution / Single-resolution training.
+    with deepspeed.zero.Init(
+        data_parallel_group=torch.distributed.group.WORLD,
+        remote_device=None if args.remote_device == 'none' else args.remote_device,
+        config_dict_or_path=deepspeed_config,
+        mpu=None,
+        enabled=args.zero_stage == 3
+    ):
+        model = ADG_DIT_MODELS[args.model](args, input_size=latent_size, log_fn=logger.info)
+
     if args.multireso:
-        resolutions = ResolutionGroup(image_size[0],
-                                      align=16,
-                                      step=args.reso_step,
-                                      target_ratios=args.target_ratios).data
+        resolutions = ResolutionGroup(image_size[0], align=16, step=args.reso_step, target_ratios=args.target_ratios).data
     else:
-        resolutions = ResolutionGroup(image_size[0],
-                                      align=16,
-                                      target_ratios=['1:1']).data
+        resolutions = ResolutionGroup(image_size[0], align=16, target_ratios=['1:1']).data
 
-    freqs_cis_img = init_image_posemb(args.rope_img,
-                                      resolutions=resolutions,
-                                      patch_size=model.patch_size,
-                                      hidden_size=model.hidden_size,
-                                      num_heads=model.num_heads,
-                                      log_fn=logger.info,
-                                      rope_real=args.rope_real)
+    freqs_cis_img = init_image_posemb(
+        args.rope_img,
+        resolutions=resolutions,
+        patch_size=model.patch_size,
+        hidden_size=model.hidden_size,
+        num_heads=model.num_heads,
+        log_fn=logger.info,
+        rope_real=args.rope_real
+    )
 
-    # Create EMA model and convert to fp16 if needed.
     ema = None
     if args.use_ema:
         ema = EMA(args, model, device, logger)
 
-    # Setup gradient checkpointing
     if args.gradient_checkpointing:
         model.enable_gradient_checkpointing()
 
-    # Setup FP16 main model:
     if args.use_fp16:
         model = Float16Module(model, args)
     logger.info(f"    Using main model with data type {'fp16' if args.use_fp16 else 'fp32'}")
@@ -315,18 +284,13 @@ def main(args):
         noise_offset=args.noise_offset,
     )
 
-    # Setup VAE
     logger.info(f"    Loading vae from {VAE_EMA_PATH}")
     vae = AutoencoderKL.from_pretrained(VAE_EMA_PATH)
-    # Setup BERT text encoder
     logger.info(f"    Loading Bert text encoder from {TEXT_ENCODER}")
     text_encoder = BertModel.from_pretrained(TEXT_ENCODER, False, revision=None)
-    # text_encoder = CLIPTextModel.from_pretrained(TEXT_ENCODER, revision=None)
-
-    # Setup BERT tokenizer:
     logger.info(f"    Loading Bert tokenizer from {TOKENIZER}")
     tokenizer = BertTokenizer.from_pretrained(TOKENIZER)
-    # Setup T5 text encoder
+
     t5_path = T5_ENCODER['T5']
     embedder_t5 = T5Embedder(t5_path, torch_dtype=T5_ENCODER['torch_dtype'], max_length=args.text_len_t5)
     tokenizer_t5 = embedder_t5.tokenizer
@@ -346,37 +310,37 @@ def main(args):
     logger.info("    Using deepspeed optimizer")
     opt = None
 
-    # ===========================================================================
-    # Building Dataset
-    # ===========================================================================
-
     logger.info(f"Building Streaming Dataset.")
     logger.info(f"    Loading index file {args.index_file} (v2)")
 
-    dataset = TextImageArrowStream(args=args,
-                                   resolution=image_size[0],
-                                   random_flip=args.random_flip,
-                                   log_fn=logger.info,
-                                   index_file=args.index_file,
-                                   multireso=args.multireso,
-                                   batch_size=batch_size,
-                                   world_size=world_size,
-                                   random_shrink_size_cond=args.random_shrink_size_cond,
-                                   merge_src_cond=args.merge_src_cond,
-                                   uncond_p=args.uncond_p,
-                                   text_ctx_len=args.text_len,
-                                   tokenizer=tokenizer,
-                                   uncond_p_t5=args.uncond_p_t5,
-                                   text_ctx_len_t5=args.text_len_t5,
-                                   tokenizer_t5=tokenizer_t5)
+    dataset = TextImageArrowStream(
+        args=args,
+        resolution=image_size[0],
+        random_flip=args.random_flip,
+        log_fn=logger.info,
+        index_file=args.index_file,
+        multireso=args.multireso,
+        batch_size=batch_size,
+        world_size=world_size,
+        random_shrink_size_cond=args.random_shrink_size_cond,
+        merge_src_cond=args.merge_src_cond,
+        uncond_p=args.uncond_p,
+        text_ctx_len=args.text_len,
+        tokenizer=tokenizer,
+        uncond_p_t5=args.uncond_p_t5,
+        text_ctx_len_t5=args.text_len_t5,
+        tokenizer_t5=tokenizer_t5
+    )
+
     if args.multireso:
         sampler = BlockDistributedSampler(dataset, num_replicas=world_size, rank=rank, seed=args.global_seed,
                                           shuffle=False, drop_last=True, batch_size=batch_size)
     else:
-        sampler = DistributedSamplerWithStartIndex(dataset, num_replicas=world_size, rank=rank, seed=args.global_seed,
-                                                   shuffle=False, drop_last=True)
+        sampler = DistributedSamplerWithStartIndex(dataset, num_replicas=world_size, rank=rank,
+                                                   seed=args.global_seed, shuffle=False, drop_last=True)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, sampler=sampler,
                         num_workers=args.num_workers, pin_memory=True, drop_last=True)
+
     logger.info(f"    Dataset contains {len(dataset):,} images.")
     logger.info(f"    Index file: {args.index_file}.")
     if args.multireso:
@@ -384,15 +348,11 @@ def main(args):
                     f'and base size {dataset.index_manager.base_size}')
         logger.info(f'\n  {dataset.index_manager.resolutions}')
 
-    # ===========================================================================
-    # Loading parameter
-    # ===========================================================================
-
     logger.info(f"Loading parameter")
     start_epoch = 0
     start_epoch_step = 0
     train_steps = 0
-    # Resume checkpoint if needed
+
     if args.resume:
         model, ema, start_epoch, start_epoch_step, train_steps = model_resume(args, model, ema, logger, len(loader))
 
@@ -411,10 +371,6 @@ def main(args):
 
     model, opt, scheduler = deepspeed_initialize(args, logger, model, opt, deepspeed_config)
 
-    # ===========================================================================
-    # Training
-    # ===========================================================================
-
     model.train()
     if args.use_ema:
         ema.eval()
@@ -431,20 +387,19 @@ def main(args):
     logger.info("    ------------------------------------------------------------------------------")
     logger.info(f"      Iters per epoch:           {iters_per_epoch:,}")
     logger.info(f"      Batch size per device:     {batch_size}")
-    logger.info(f"      Batch size all device:     {batch_size * world_size * grad_accu_steps:,} (world_size * batch_size * grad_accu_steps)")
+    logger.info(f"      Batch size all device:     {batch_size * world_size * grad_accu_steps:,}")
     logger.info(f"      Gradient Accu steps:       {args.grad_accu_steps}")
     logger.info(f"      Total optimization steps:  {args.epochs * iters_per_epoch // grad_accu_steps:,}")
-
     logger.info(f"      Training epochs:           {start_epoch}/{args.epochs}")
     logger.info(f"      Training epoch steps:      {start_epoch_step:,}/{iters_per_epoch:,}")
-    logger.info(f"      Training total steps:      {train_steps:,}/{min(args.max_training_steps, args.epochs * iters_per_epoch):,}")
+    logger.info(f"      Training total steps:      {train_steps:,}/"
+                f"{min(args.max_training_steps, args.epochs * iters_per_epoch):,}")
     logger.info("    ------------------------------------------------------------------------------")
     logger.info(f"      Noise schedule:            {args.noise_schedule}")
     logger.info(f"      Beta limits:               ({args.beta_start}, {args.beta_end})")
     logger.info(f"      Learn sigma:               {args.learn_sigma}")
     logger.info(f"      Prediction type:           {args.predict_type}")
     logger.info(f"      Noise offset:              {args.noise_offset}")
-
     logger.info("    ------------------------------------------------------------------------------")
     logger.info(f"      Using EMA model:           {args.use_ema} ({args.ema_dtype})")
     if args.use_ema:
@@ -460,29 +415,23 @@ def main(args):
         gc.disable()
         gc.collect()
 
-    # Variables for monitoring/logging purposes:
     log_steps = 0
     running_loss = 0
     start_time = time.time()
     best_loss = float('inf')
     best_checkpoint_path = None
 
-    # Training loop
     epoch = start_epoch
     while epoch < args.epochs:
-        # Random shuffle dataset
         shuffle_seed = args.global_seed + epoch
         logger.info(f"    Start random shuffle with seed={shuffle_seed}")
-        # Makesure all processors use the same seed to shuffle dataset.
         dataset.shuffle(seed=shuffle_seed, fast=True)
         logger.info(f"    End of random shuffle")
 
-        # Move sampler to start_index
         if not args.multireso:
             start_index = start_epoch_step * world_size * batch_size
             if start_index != sampler.start_index:
                 sampler.start_index = start_index
-                # Reset start_epoch_step to zero, to ensure next epoch will start from the beginning.
                 start_epoch_step = 0
                 logger.info(f"      Iters left this epoch: {len(loader):,}")
 
@@ -491,7 +440,6 @@ def main(args):
         logger.info(f"    Beginning epoch {epoch}...")
         for batch in loader:
             latents, model_kwargs = prepare_model_inputs(args, batch, device, vae, text_encoder, text_encoder_t5, freqs_cis_img)
-
             loss_dict = diffusion.training_losses(model=model, x_start=latents, model_kwargs=model_kwargs)
             loss = loss_dict["loss"].mean()
             model.backward(loss)
@@ -504,58 +452,46 @@ def main(args):
                 else:
                     ema.update(model.module, step=train_steps)
 
-            # ===========================================================================
-            # Log loss values:
-            # ===========================================================================
             running_loss += loss.item()
             log_steps += 1
             train_steps += 1
             epoch_loss_sum += loss.item()
             epoch_steps += 1
 
-            if  rank == 0 and train_steps % args.log_every == 0:
-                # Ensure synchronization across GPUs before timing/logging
+            if rank == 0 and train_steps % args.log_every == 0:
                 torch.cuda.synchronize()
-
-                # Calculate elapsed time for steps
                 end_time = time.time()
                 steps_per_sec = log_steps / (end_time - start_time)
 
-                # Compute the average loss across all processes
                 avg_loss_tensor = torch.tensor(running_loss / log_steps, device=device)
                 dist.all_reduce(avg_loss_tensor, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss_tensor.item() / world_size
 
-                if rank == 0:  # Only log on the main process
-                    # Retrieve current learning rate
+                if rank == 0:
                     current_lr = opt.param_groups[0]['lr']
                     samples_per_sec = int(steps_per_sec * batch_size * world_size)
 
-                    # Log metrics to TensorBoard
                     writer.add_scalar('Loss/train', avg_loss, train_steps)
                     writer.add_scalar('Learning Rate', current_lr, train_steps)
                     writer.add_scalar('Steps/Sec', steps_per_sec, train_steps)
                     writer.add_scalar('Samples/Sec', samples_per_sec, train_steps)
 
-                    # Log details to the console
-                    logger.info(f"(step={train_steps:07d}) " +
-                                (f"(update_step={train_steps // args.grad_accu_steps:07d}) " if args.grad_accu_steps > 1 else "") +
+                    logger.info(f"(step={train_steps:07d}) "
+                                f"(update_step={train_steps // args.grad_accu_steps:07d}) "
                                 f"Train Loss: {avg_loss:.4f}, "
                                 f"Lr: {current_lr:.6g}, "
                                 f"Steps/Sec: {steps_per_sec:.2f}, "
                                 f"Samples/Sec: {samples_per_sec:d}")
 
-                # Reset monitoring variables for the next logging period
                 running_loss = 0
                 log_steps = 0
                 start_time = time.time()
 
-            # Garbage collection:
             if args.gc_interval > 0 and (train_steps % args.gc_interval == 0):
                 gc.collect()
 
-            if (train_steps % args.ckpt_every == 0 or train_steps % args.ckpt_latest_every == 0
-                ) and train_steps > 0:
+            # 체크포인트 저장
+            if (train_steps % args.ckpt_every == 0 or train_steps % args.ckpt_latest_every == 0) and train_steps > 0:
                 save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='step')
 
             if train_steps >= args.max_training_steps:
@@ -569,26 +505,30 @@ def main(args):
         if rank == 0:
             writer.add_scalar('Epoch/train', epoch, train_steps)
 
-        # Epoch 종료 후 평균 loss 계산
         avg_epoch_loss = epoch_loss_sum / epoch_steps if epoch_steps > 0 else float('inf')
 
+        # epoch 단위 체크포인트 저장
         if args.ckpt_every_n_epoch > 0 and epoch % args.ckpt_every_n_epoch == 0:
-            # epoch 단위 체크포인트 저장
             save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='epoch')
-            # best 모델 갱신 여부 확인
+
+            # best 모델 갱신
             if avg_epoch_loss < best_loss:
-                # 기존 best 체크포인트 삭제
+                # 기존 best 체크포인트 제거 로직 수정
                 if best_checkpoint_path is not None and os.path.exists(best_checkpoint_path):
                     if rank == 0:
                         logger.info(f"Removing old best checkpoint: {best_checkpoint_path}")
-                        os.remove(best_checkpoint_path)
+                        # 디렉토리인 경우 제거
+                        if os.path.isdir(best_checkpoint_path):
+                            shutil.rmtree(best_checkpoint_path)
+                        else:
+                            os.remove(best_checkpoint_path)
+
                 best_loss = avg_epoch_loss
                 save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='best', is_best=True)
                 best_checkpoint_path = os.path.join(checkpoint_dir, "best.pt")
 
         epoch += 1
 
-    # Save the final model
     save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='final')
 
     if rank == 0:
@@ -598,6 +538,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-
-    # Start
     main(get_args())

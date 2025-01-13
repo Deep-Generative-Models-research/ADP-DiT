@@ -6,8 +6,8 @@ export PYTHONPATH=workspace/IndexKits:$PYTHONPATH
 
 # Task and file settings
 task_flag="dit_g_2"                                  # The task flag is used to identify folders.
-index_file=dataset/AD2/jsons/AD2.json       # Index file for dataloader
-results_dir=./log_EXP_dit_g_2_AD2               # Save root for results
+index_file=dataset/AD3_meta/jsons/AD3_meta.json       # Index file for dataloader
+results_dir=/workspace/mydata/adgdit/log_EXP_dit_g_2_AD3_meta              # Save root for results
 
 # Training hyperparameters
 batch_size=16                                        # Training batch size
@@ -17,9 +17,9 @@ lr=0.0001                                            # Learning rate
 ckpt_every=9999999                                   # Create a ckpt every a few steps.
 ckpt_latest_every=9999999                            # Create a ckpt named `latest.pt` every a few steps.
 ckpt_every_n_epoch=100                               # Create a ckpt every a few epochs.
-epochs=3000                                          # Total training epochs
-warmup_num_steps=1425                                  # Warm-up steps
-t_max=5700                                            # Steps per cosine cycle
+epochs=5000                                          # Total training epochs
+warmup_num_steps=1932                                  # Warm-up steps
+t_max=7728                                            # Steps per cosine cycle
 eta_min=1e-5                                         # Minimum learning rate during decay
 t_mult=2.0                                           # Multiplier for each cycle
 gamma=0.9
