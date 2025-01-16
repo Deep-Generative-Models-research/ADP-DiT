@@ -1,82 +1,62 @@
-
+# -*- coding: utf-8 -*-
 import os
-import pandas as pd
+from PIL import Image
 
-# File paths
-file_path_1 = "/mnt/ssd/ADG-DiT/dataset/AD2_meta/csvfile/image_text_categorical.csv"
-file_path_2 = "/mnt/ssd/ADG-DiT/dataset/AD2_meta/csvfile/output_file.csv"
+# ���� �̹������� �ִ� ���͸�
+input_dir = "/mnt/ssd/datset/images"
+# ���� ũ�ӵ� �̹����� ������ ���͸�
+output_dir = "/mnt/ssd/datset/images_cropped"
 
-# Load the CSV files
-df1 = pd.read_csv(file_path_1)
-df2 = pd.read_csv(file_path_2)
+# ���� �̵��� �ȼ� ��
+shift_up = 20
 
-# Remove whitespace from image_path
-df1['image_path'] = df1['image_path'].str.strip()
-df2['image_path'] = df2['image_path'].str.strip()
+# ��� ���� ���͸��� ������ ����
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+    print(f"��� ���� ���͸��� �����߽��ϴ�: {output_dir}")
 
-# Get the filename only from image_path
-df1['file_name'] = df1['image_path'].apply(lambda x: os.path.basename(x))
-df2['file_name'] = df2['image_path'].apply(lambda x: os.path.basename(x))
+# ���͸� �� ��� ���Ͽ� ���� ó��
+for filename in os.listdir(input_dir):
+    # Ȯ���ڰ� �̹������� Ȯ�� (��: png, jpg, jpeg)
+    if not (filename.lower().endswith(".png") or 
+            filename.lower().endswith(".jpg") or
+            filename.lower().endswith(".jpeg")):
+        continue
 
-# Merge the two dataframes on 'file_name'
-merged_df = pd.merge(df1, df2, on='file_name', how='outer')
+    # ���� �̹��� ���
+    img_path = os.path.join(input_dir, filename)
 
-# Combine the 'text_en' columns from both files
-merged_df['text_en'] = merged_df['text_en_x'].fillna('') + ' ' + merged_df['text_en_y'].fillna('')
+    try:
+        # �̹��� �ҷ����� & RGB ��ȯ
+        img = Image.open(img_path).convert("RGB")
+        width, height = img.size
 
-# Drop unnecessary columns
-merged_df = merged_df[['image_path_x', 'text_en']].rename(columns={'image_path_x': 'image_path'})
+        # Center Crop���� short_side ����
+        short_side = min(width, height)
 
-# Save the merged CSV
-output_path = "/mnt/ssd/ADG-DiT/dataset/AD2_meta/csvfile/merged_output.csv"
-merged_df.to_csv(output_path, index=False)
+        # �߾�(top) ��� �� shift_up ����
+        center_top = (height - short_side) // 2
+        top = center_top - shift_up
+        if top < 0:
+            top = 0
 
+        left = (width - short_side) // 2
+        right = left + short_side
+        bottom = top + short_side
 
-# import pandas as pd
+        # bottom�� �̹��� ������ ����� �ʵ��� ����
+        if bottom > height:
+            bottom = height
+            top = bottom - short_side
 
-# # File paths
-# input_csv_path = '/mnt/ssd/ADG-DiT/dataset/AD2_meta/csvfile/image_text_numeric.csv'
-# output_csv_path = '/mnt/ssd/ADG-DiT/dataset/AD2_meta/csvfile/output_file.csv'
+        # �߶� �� 256x256���� ��������
+        img_crop = img.crop((left, top, right, bottom))
+        img_crop_256 = img_crop.resize((256, 256), Image.LANCZOS)
 
-# # Read the CSV file
-# df = pd.read_csv(input_csv_path)
+        # ��� ���� ��� ����
+        save_path = os.path.join(output_dir, filename)
+        img_crop_256.save(save_path)
+        print(f"Processed: {filename} -> {save_path}")
 
-# # Generate the text for Month_to_Visit and Age
-# df['additional_text'] = df.apply(
-#     lambda row: f"{int(row['Age'])} years old, {int(row['Month_to_Visit'])} months from first visit", axis=1
-# )
-
-# # Load the image_text.csv file
-# image_text_path = '/mnt/ssd/ADG-DiT/dataset/AD2_meta/csvfile/output_file.csv'
-# image_text_df = pd.read_csv(image_text_path)
-
-# # Merge the data on the 'image_path' column
-# merged_df = image_text_df.merge(df[['image_path', 'additional_text']], on='image_path', how='left')
-
-# # Prepend the 'additional_text' to the 'text_en' column
-# merged_df['text_en'] = merged_df['additional_text'].fillna('') + ' ' + merged_df['text_en'].fillna('')
-
-# # Drop the 'additional_text' column as it's no longer needed
-# merged_df.drop(columns=['additional_text'], inplace=True)
-
-# # Save the updated CSV file
-# merged_df.to_csv(image_text_path, index=False)
-
-# import torch
-
-# checkpoint_path = "/mnt/ssd/ADG-DiT/ADG-DiT_G_2_ADoldversion/001-dit_g_2/checkpoints/e1300.pt/mp_rank_00_model_states.pt"
-# state_dict = torch.load(checkpoint_path, map_location='cpu')
-
-# with open("model_shapes.txt", "w") as f:
-#     f.write("Keys in the state_dict:\n")
-#     for key in state_dict.keys():
-#         f.write(key + "\n")
-
-#     if 'module' in state_dict:
-#         model_state = state_dict['module']
-#     else:
-#         model_state = state_dict
-
-#     f.write("\nModel state parameters and shapes:\n")
-#     for k, v in model_state.items():
-#         f.write(f"{k}: {list(v.shape)}\n")
+    except Exception as e:
+        print(f"���� �߻� - ����: {filename}, ����: {e}")
