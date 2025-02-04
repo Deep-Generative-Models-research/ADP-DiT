@@ -1,3 +1,3 @@
-# ADG-DiT 
+# ADP-DiT 
 
-Alzheimer's Disease Prediction Generation Diffusion Transformer
+Alzheimer's Disease Progression Diffusion Transformer
