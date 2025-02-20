@@ -1,15 +1,12 @@
-Usage and Legal Notices: 
+Usage and Legal Notices:
 
-Tencent is pleased to support the open source community by making Tencent Hunyuan available. 
+Adpdit is pleased to support the open source community by making Adpdit available.
 
-Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved. The below software and/or models in this distribution may have been modified by THL A29 Limited ("Tencent Modifications"). All Tencent Modifications are Copyright (C) THL A29 Limited.
+Adpdit is licensed under the Apache License, Version 2.0, except for the third-party components listed below. Adpdit does not impose any additional limitations beyond what is outlined in the respective licenses of these third-party components. Users must comply with all terms and conditions of original licenses of these third-party components and must ensure that the usage of the third-party components adheres to all relevant laws and regulations.
 
-Tencent Hunyuan is licensed under the Tencent Hunyuan Community License Agreement except for the third-party components listed below. Tencent Hunyuan does not impose any additional limitations beyond what is outlined in the repsective licenses of these third-party components. Users must comply with all terms and conditions of original licenses of these third-party components and must ensure that the usage of the third party components adheres to all relevant laws and regulations.
+For avoidance of doubts, Adpdit means the large language models and their software and algorithms, including trained model weights, parameters (including optimizer states), machine-learning model code, inference-enabling code, training-enabling code, fine-tuning enabling code, and other elements of the foregoing made publicly available by Adpdit in accordance with the Apache License, Version 2.0.
 
-For avoidance of doubts, Tencent Hunyuan means the large language models and their software and algorithms, including trained model weights, parameters (including optimizer states), machine-learning model code, inference-enabling code, training-enabling code, fine-tuning enabling code and other elements of the foregoing made publicly available by Tencent in accordance with Tencent Hunyuan Community License Agreement.
-
-
-
+All copyrights and ownership of Adpdit remain with the original Adpdit authors. Any modifications or distributions must retain this notice and comply with the terms outlined in the Apache License, Version 2.0.
 Other dependencies and licenses:
 
 Open Source Software Licensed under the BSD 3-Clause License and Other Licenses of the Third-Party Components therein:
@@ -91,7 +88,6 @@ The below software in this distribution may have been modified by THL A29 Limite
 --------------------------------------------------------------------
 1. diffusers
 Copyright (c) diffusers original author and authors
-Please note this software has been modified by Tencent in this distribution.
 
 2. transformers
 Copyright (c) transformers original author and authors
@@ -101,29 +97,17 @@ Copyright 2019 Ross Wightman
 
 4. text-to-text-transfer-transformer
 Copyright (c) text-to-text-transfer-transformer original author and authors
-Please note this software has been modified by Tencent in this distribution.
 
 5. pytorch-fid
 Copyright (c) pytorch-fid original author and authors
-Please note this software has been modified by Tencent in this distribution.
 
-6. Image-Quality-Assessment-Toolbox
+5. Image-Quality-Assessment-Toolbox
 Copyright 2021 Qunliang Xing
 
-7. accelerate
+6. accelerate
 Copyright (c) accelerate original author and authors
 
-8. IP-Adapter
-Copyright (c) IP-Adapter original author and authors
-Please note this software has been modified by Tencent in this distribution.
-
-9. mT5
-Copyright (c) mT5 original author and authors
-
-10. Mistral-7B
-Copyright (c) 2024 Mistral AI, All rights reserved
-
-11. peft
+7. peft
 Copyright 2023 The HuggingFace Team. All rights reserved.
 
 
@@ -256,15 +240,8 @@ Copyright (c) 2018 Alex Rogozhnikov
 2. loguru
 Copyright (c) 2017
 
-3. Chinese-CLIP
-Copyright (c) 2012-2022 OFA-Sys Team
-Copyright (c) 2012-2022 Gabriel Ilharco, Mitchell Wortsman, Nicholas Carlini, Rohan Taori, Achal Dave, Vaishaal Shankar, John Miller, Hongseok Namkoong, Hannaneh Hajishirzi, Ali Farhadi, Ludwig Schmidt
-
 4. DeepSpeed
 Copyright (c) Microsoft Corporation.
-
-5. glid-3-xl
-Copyright (c) 2021 OpenAI
 
 6. lazysizes
 Copyright (c) 2015 Alexander Farkas
@@ -274,12 +251,6 @@ Copyright (c) 2021 Vision and Computational Cognition Group
 
 8. sd-vae-ft-ema
 Copyright (c) sd-vae-ft-ema original author and authors
-
-9. ComfyUI-Diffusers
-Copyright (c) 2023 Limitex
-
-10. glide-text2im
-Copyright (c) 2021 OpenAI
 
 11. improved-diffusion
 Copyright (c) 2021 OpenAI
@@ -350,26 +321,6 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 For the license of other third party components, please refer to the following URL:
 https://github.com/opencv/opencv-python/blob/4.x/LICENSE-3RD-PARTY.txt
-
-
-Open Source Software Licensed under the MIT License and Other Licenses of the Third-Party Components therein:
---------------------------------------------------------------------
-1. onnxruntime
-Copyright (c) Microsoft Corporation.
-
-
-A copy of the MIT is included in this file.
-
-For the license of other third party components, please refer to the following URL:
-https://github.com/microsoft/onnxruntime/blob/v1.16.3/ThirdPartyNotices.txt
-
-
-Open Source Software/Model Licensed under the Apache License Version 2.0:
-The below software in this distribution may have been modified by Tencent.
---------------------------------------------------------------------
-1. dwpose
-Copyright 2018-2020 Open-MMLab.
-Please note this software has been modified by Tencent in this distribution.
 
 
 Terms of the Apache License Version 2.0:

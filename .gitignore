@@ -140,8 +140,6 @@ trt/deactivate.sh
 
 # dataset
 dataset
-hunyuan_dit_cu11.tar
-hunyuan_dit_cu12.tar
 log_EXP/
 log_EXP
 log_EXP_gpu1/
@@ -171,3 +169,4 @@ results(_ADP-DiT_g_2_T5_AD2)
 results(_ADP-DiT_g_2_T5&aug_AD2)_3000epoch
 ADP-DiT_G_2_AD2_aug/
 log_EXP_dit_g_2_AD3/
+adp_dit_cuda12.tar
