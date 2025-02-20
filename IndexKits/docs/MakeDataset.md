@@ -24,7 +24,7 @@ Filename: `base_config.yaml`
 
 ```yaml
 source:
-  - /ADGDiT/dataset/porcelain/arrows/00000.arrow
+  - /ADPDiT/dataset/porcelain/arrows/00000.arrow
 ```
 
 | Field Name |   Type   | Description |
@@ -93,7 +93,7 @@ Below are the specific meanings of “action” and the optional values under di
 
 Add an `md5` field under the `filter` section to initiate MD5 filtering. Multiple MD5 filtering criteria can be applied simultaneously, with the intersection of multiple conditions being taken.
 
-例如:
+example:
 
 - `badcase.txt` is a list of MD5s, aiming to filter out the entries listed in these lists.
 - `badcase.json` is a dictionary, where the key is the MD5 and the value is a text-related `tag`. The goal is to filter out specific `tags`.
@@ -189,7 +189,7 @@ While wildcards can be used to fetch multiple arrows at once, there might be ins
 
 ```yaml
 source:
-  - /ADGDiT/dataset/porcelain/arrows/*.arrow:
+  - /ADPDiT/dataset/porcelain/arrows/*.arrow:
       exclude:
         - arrow1
         - arrow2
@@ -211,7 +211,7 @@ In the source, for the Arrow(s) you want to repeat (which can include wildcards 
 
 ```yaml
 source:
-  - /ADGDiT/dataset/porcelain/arrows/*.arrow:
+  - /ADPDiT/dataset/porcelain/arrows/*.arrow:
       repeat: 10
 ```
 
@@ -249,11 +249,11 @@ Add an `md5` field under the `repeater` section.
 repeater:
   md5:
     - name: goodcase1
-      path: /ADGDiT/dataset/porcelain/md5_repeat_1.json
+      path: /ADPDiT/dataset/porcelain/md5_repeat_1.json
       type: dict
       plus: 3
     - name: goodcase2
-      path: /ADGDiT/dataset/porcelain/md5_repeat_2.json
+      path: /ADPDiT/dataset/porcelain/md5_repeat_2.json
       type: list
       repeat: 6
 ```
@@ -295,9 +295,9 @@ To create a multi-resolution dataset, you can do so through a configuration file
 
 ```shell
 src:
-    - /ADGDiT/dataset/porcelain/jsons/a.json
-    - /ADGDiT/dataset/porcelain/jsons/b.json
-    - /ADGDiT/dataset/porcelain/jsons/c.json
+    - /ADPDiT/dataset/porcelain/jsons/a.json
+    - /ADPDiT/dataset/porcelain/jsons/b.json
+    - /ADPDiT/dataset/porcelain/jsons/c.json
 base_size: 512
 reso_step: 32
 min_size: 512

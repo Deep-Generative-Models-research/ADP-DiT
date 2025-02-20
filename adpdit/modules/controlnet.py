@@ -19,16 +19,16 @@ from .embedders import TimestepEmbedder, PatchEmbed, timestep_embedding
 from .norm_layers import RMSNorm
 from .poolers import AttentionPool
 
-from .models import FP32_Layernorm, FP32_SiLU, ADGDiTBlock
+from .models import FP32_Layernorm, FP32_SiLU, ADPDiTBlock
 
 def zero_module(module):
     for p in module.parameters():
         nn.init.zeros_(p)
     return module
 
-class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
+class ADPControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
     """
-    ADGDiT: Diffusion model with a Transformer backbone.
+    ADPDiT: Diffusion model with a Transformer backbone.
 
     Inherit ModelMixin and ConfigMixin to be compatible with the sampler StableDiffusionPipeline of diffusers.
 
@@ -172,12 +172,12 @@ class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
 
     def from_dit(self, dit):
         """
-        Load the parameters from a pre-trained ADGDiT model.
+        Load the parameters from a pre-trained ADPDiT model.
 
         Parameters
         ----------
-        dit: ADGDiT
-            The pre-trained ADGDiT model.
+        dit: ADPDiT
+            The pre-trained ADPDiT model.
         """
 
 
@@ -301,7 +301,7 @@ class ADGControlNet(ModelMixin, ConfigMixin, PeftAdapterMixin):
         # ========================= Deal with Condition =========================
         condition = self.x_embedder(condition)
 
-        # ========================= Forward pass through ADGDiT blocks =========================
+        # ========================= Forward pass through ADPDiT blocks =========================
         controls = []
         x = x + self.before_proj(condition) # add condition
         for layer, block in enumerate(self.blocks):

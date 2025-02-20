@@ -1,17 +1,17 @@
 import torch
 import os
-from adgdit.config import get_args
-from adgdit.modules.models import ADG_DIT_MODELS
+from adpdit.config import get_args
+from adpdit.modules.models import ADP_DIT_MODELS
 
-from adgdit.inference import _to_tuple
+from adpdit.inference import _to_tuple
 
-model_path = "/mnt/ssd/ADG-DiT/ADG-DiT_XL_2_ADoldversion/003-dit_XL_2/checkpoints/e4800.pt/zero_pp_rank_0_mp_rank_00_optim_states.pt"  # Replace with your model path
+model_path = "/mnt/ssd/ADP-DiT/ADP-DiT_XL_2_ADoldversion/003-dit_XL_2/checkpoints/e4800.pt/zero_pp_rank_0_mp_rank_00_optim_states.pt"  # Replace with your model path
 args = get_args()
 
 image_size = _to_tuple(args.image_size)
 latent_size = (image_size[0] // 8, image_size[1] // 8)
 
-model = ADG_DIT_MODELS[args.model](args,
+model = ADP_DIT_MODELS[args.model](args,
                                        input_size=latent_size,
                                        log_fn=print,
                                         )

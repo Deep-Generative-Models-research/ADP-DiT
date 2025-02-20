@@ -13,8 +13,8 @@ with open("index_kits/__init__.py", "r") as file:
 setup(
     name='index_kits',
     version=version,
-    author='jarvizhang',
-    author_email='jarvizhang@tencent.com',
+    author='juneyonglee',
+    author_email='diziyong@hufs.ac.kr',
     description='An index kits for streaming reading arrow data.',
     packages=['index_kits', 'index_kits/dataset'],
     scripts=['bin/idk'],

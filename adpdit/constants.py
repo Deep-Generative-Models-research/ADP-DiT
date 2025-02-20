@@ -1,5 +1,5 @@
 import torch
-from adgdit.diffusion.gaussian_diffusion import GaussianDiffusion
+from adpdit.diffusion.gaussian_diffusion import GaussianDiffusion
 
 # =======================================================
 

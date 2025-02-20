@@ -163,7 +163,7 @@ def process_dataset(dataset_info, summary_results, top_percentage=5):
     """
     - input_csv: 입력(이미지 경로) CSV
     - 여기서 읽은 데이터를 바탕으로 '상위 5%' 차이 맵 생성
-    - 결과물은 /mnt/ssd/ADG-DiT/results/evaluation/{dataset}/ 아래에 저장
+    - 결과물은 /mnt/ssd/ADP-DiT/results/evaluation/{dataset}/ 아래에 저장
     """
     dataset = dataset_info["dataset"]
     input_csv = dataset_info["input_csv"]  # 원본 이미지 경로가 들어있는 CSV
@@ -197,7 +197,7 @@ def process_dataset(dataset_info, summary_results, top_percentage=5):
     print(f"상위 {top_percentage}% ({len(top_df)}) 이미지 쌍 선택")
 
     # (3) evaluation/{dataset} 폴더 생성
-    evaluation_root = "/mnt/ssd/ADG-DiT/results/evaluation"
+    evaluation_root = "/mnt/ssd/ADP-DiT/results/evaluation"
     dataset_dir = os.path.join(evaluation_root, dataset)
     if not os.path.exists(dataset_dir):
         os.makedirs(dataset_dir)
@@ -263,25 +263,25 @@ def process_dataset(dataset_info, summary_results, top_percentage=5):
 def main():
     """
     difference_map.py 실행 시, 아래 evaluations에 정의된 CSV(입력 경로)들을 읽어
-    /mnt/ssd/ADG-DiT/results/evaluation/ 폴더 아래에 결과(차이맵, CSV 등)를 생성.
+    /mnt/ssd/ADP-DiT/results/evaluation/ 폴더 아래에 결과(차이맵, CSV 등)를 생성.
     """
     evaluations = [
         {
             "dataset": "ADtoAD",
-            "input_csv": "/mnt/ssd/ADG-DiT/results/evaluation/ADtoAD/ADtoAD_best_results.csv",
+            "input_csv": "/mnt/ssd/ADP-DiT/results/evaluation/ADtoAD/ADtoAD_best_results.csv",
         },
         {
             "dataset": "MCtoMC",
-            "input_csv": "/mnt/ssd/ADG-DiT/results/evaluation/MCtoMC/MCtoMC_best_results.csv",
+            "input_csv": "/mnt/ssd/ADP-DiT/results/evaluation/MCtoMC/MCtoMC_best_results.csv",
         },
         {
             "dataset": "CNtoCN",
-            "input_csv": "/mnt/ssd/ADG-DiT/results/evaluation/CNtoCN/CNtoCN_best_results.csv",
+            "input_csv": "/mnt/ssd/ADP-DiT/results/evaluation/CNtoCN/CNtoCN_best_results.csv",
         }
     ]
 
     # 최종 평가 요약 CSV
-    evaluation_root = "/mnt/ssd/ADG-DiT/results/evaluation"
+    evaluation_root = "/mnt/ssd/ADP-DiT/results/evaluation"
     summary_csv_path = os.path.join(evaluation_root, "evaluate.csv")
 
     summary_results = []

@@ -3,8 +3,8 @@ import deepspeed
 
 from .constants import *
 from .diffusion.gaussian_diffusion import ModelVarType
-from .modules.models import ADG_DIT_CONFIG
-from adgdit.lr_scheduler import add_tuning_arguments
+from .modules.models import ADP_DIT_CONFIG
+from adpdit.lr_scheduler import add_tuning_arguments
 
 
 
@@ -28,8 +28,8 @@ def get_args(default_args=None):
     parser.set_defaults(use_fp16=True)
     parser.add_argument("--extra-fp16", action="store_true", help="Use extra fp16 for vae and text_encoder.")
 
-    # ADG-DiT
-    parser.add_argument("--model", type=str, choices=list(ADG_DIT_CONFIG.keys()), default='DiT-g/2')
+    # ADP-DiT
+    parser.add_argument("--model", type=str, choices=list(ADP_DIT_CONFIG.keys()), default='DiT-g/2')
     parser.add_argument("--image-size", type=int, nargs='+', default=[256, 256],
                         help='Image size (h, w). If a single value is provided, the image will be treated to '
                              '(value, value).')
@@ -85,7 +85,7 @@ def get_args(default_args=None):
     parser.add_argument("--model-root", type=str, default="ckpts",
                         help="Root path of all the models, including t2i model and dialoggen model.")
     parser.add_argument("--dit-weight", type=str, default=None,
-                        help="Path to the ADG-DiT model. If None, search the model in the args.model_root."
+                        help="Path to the ADP-DiT model. If None, search the model in the args.model_root."
                              "1. If it is a file, load the model directly. In this case, the --load-key is ignored."
                              "2. If it is a directory, search the model in the directory. Support two types of models: "
                              "1) named `pytorch_model_*.pt`, where * is specified by the --load-key. "
@@ -94,7 +94,7 @@ def get_args(default_args=None):
                              "weights to load. By default, load 'ema' weights. "
                         )
     parser.add_argument("--controlnet-weight", type=str, default=None,
-                        help="Path to the ADG-DiT controlnet model. If None, search the model in the args.model_root."
+                        help="Path to the ADP-DiT controlnet model. If None, search the model in the args.model_root."
                              "1. If it is a directory, search the model in the directory."
                              "2. If it is a file, load the model directly. In this case, the --load-key is ignored."
                         )
@@ -105,7 +105,7 @@ def get_args(default_args=None):
 
     # Model setting
     parser.add_argument("--load-key", type=str, choices=["ema", "module", "distill", 'merge'], default="ema",
-                        help="Load model key for ADGDiT checkpoint.")
+                        help="Load model key for ADPDiT checkpoint.")
     parser.add_argument('--use-style-cond', action="store_true",
                         help="Use style condition in hydit. Only for hydit version <= 1.1")
     parser.add_argument('--size-cond', type=int, nargs='+', default=None,

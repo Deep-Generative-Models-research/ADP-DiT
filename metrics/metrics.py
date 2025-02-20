@@ -115,30 +115,30 @@ def preprocess_image_fid(img_path, img_size=299):
 
 def evaluate_images():
     """
-    이 함수는 /mnt/ssd/ADG-DiT/results/XXX/results.csv 에서 데이터를 읽고,
+    이 함수는 /mnt/ssd/ADP-DiT/results/XXX/results.csv 에서 데이터를 읽고,
     (동일 input_path 중) SSIM이 가장 큰 결과만 골라 FID, 메트릭을 계산합니다.
-    최종 결과는 /mnt/ssd/ADG-DiT/results/evaluation/{dataset}/{dataset}_best_results.csv 형태로 저장하고,
-    평균값은 /mnt/ssd/ADG-DiT/results/evaluation/evaluate.csv 에 누적 기록합니다.
+    최종 결과는 /mnt/ssd/ADP-DiT/results/evaluation/{dataset}/{dataset}_best_results.csv 형태로 저장하고,
+    평균값은 /mnt/ssd/ADP-DiT/results/evaluation/evaluate.csv 에 누적 기록합니다.
     """
     # 여러 CSV 파일 경로 정의
     evaluations = [
         {
             "dataset": "ADtoAD",
-            "input_csv": "/mnt/ssd/ADG-DiT/results/ADtoAD/results.csv",
+            "input_csv": "/mnt/ssd/ADP-DiT/results/ADtoAD/results.csv",
         },
         {
             "dataset": "MCtoMC",
-            "input_csv": "/mnt/ssd/ADG-DiT/results/MCtoMC/results.csv",
+            "input_csv": "/mnt/ssd/ADP-DiT/results/MCtoMC/results.csv",
         },
         {
             "dataset": "CNtoCN",
-            "input_csv": "/mnt/ssd/ADG-DiT/results/CNtoCN/results.csv",
+            "input_csv": "/mnt/ssd/ADP-DiT/results/CNtoCN/results.csv",
         }
     ]
 
     # 최종 평가 요약을 저장할 CSV 파일 경로
-    # => /mnt/ssd/ADG-DiT/results/evaluation/evaluate.csv
-    evaluation_root = "/mnt/ssd/ADG-DiT/results/evaluation"
+    # => /mnt/ssd/ADP-DiT/results/evaluation/evaluate.csv
+    evaluation_root = "/mnt/ssd/ADP-DiT/results/evaluation"
     summary_csv_path = os.path.join(evaluation_root, "evaluate.csv")
 
     # FID 계산기 초기화
@@ -184,9 +184,9 @@ def evaluate_images():
             target_path_original = row['target_image_path']
             prompt = row['prompt']
 
-            # /workspace/ => /mnt/ssd/ADG-DiT/ 로 치환 (절대경로 변환)
+            # /workspace/ => /mnt/ssd/ADP-DiT/ 로 치환 (절대경로 변환)
             original_base_path = '/workspace'
-            new_base_path = '/mnt/ssd/ADG-DiT'
+            new_base_path = '/mnt/ssd/ADP-DiT'
 
             if os.path.isabs(input_path_original):
                 input_path = input_path_original.replace(original_base_path, new_base_path)
@@ -282,7 +282,7 @@ def evaluate_images():
 
         # ---------------------------
         # (2) 결과 CSV 저장
-        # => /mnt/ssd/ADG-DiT/results/evaluation/{dataset}/{dataset}_best_results.csv
+        # => /mnt/ssd/ADP-DiT/results/evaluation/{dataset}/{dataset}_best_results.csv
         # ---------------------------
         dataset_dir = os.path.join(evaluation_root, dataset)
         if not os.path.exists(dataset_dir):
@@ -307,7 +307,7 @@ def evaluate_images():
             print(f"베스트 결과가 새 CSV 파일로 저장되었습니다: {best_csv_path}")
 
         # ---------------------------
-        # (3) /mnt/ssd/ADG-DiT/results/evaluation/evaluate.csv 에 평균값 추가
+        # (3) /mnt/ssd/ADP-DiT/results/evaluation/evaluate.csv 에 평균값 추가
         # ---------------------------
         summary_df = pd.DataFrame([{
             "Dataset": mean_values["Dataset"],

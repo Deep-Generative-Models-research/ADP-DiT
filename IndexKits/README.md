@@ -58,7 +58,7 @@ for i in range(len(index_manager)):
     # {
     #      'index': 3,              # in-json index
     #      'in_arrow_index': 3,     # in-arrow index
-    #      'arrow_name': '/ADGDiT/dataset/porcelain/00000.arrow',
+    #      'arrow_name': '/ADPDiT/dataset/porcelain/00000.arrow',
     #      'text_zh': 'Fortune arrives with the auspicious green porcelain tea cup',
     #      'md5': '1db68f8c0d4e95f97009d65fdf7b441c'
     # }

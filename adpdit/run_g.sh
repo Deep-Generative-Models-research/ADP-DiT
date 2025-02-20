@@ -7,4 +7,4 @@ params=" \
             "
 
 # 추가: MASTER_PORT 환경 변수 사용
-deepspeed --master_port=${MASTER_PORT} adgdit/train_deepspeed.py ${params} "$@"
+deepspeed --master_port=${MASTER_PORT} adpdit/train_deepspeed.py ${params} "$@"

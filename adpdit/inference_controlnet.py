@@ -17,8 +17,8 @@ from transformers.modeling_utils import logger as tf_logger
 
 from .constants import SAMPLER_FACTORY, NEGATIVE_PROMPT, TRT_MAX_WIDTH, TRT_MAX_HEIGHT, TRT_MAX_BATCH_SIZE
 from .diffusion.pipeline_controlnet import StableDiffusionControlNetPipeline
-from .modules.models import ADGDiT, ADG_DIT_CONFIG
-from .modules.controlnet import ADGControlNet
+from .modules.models import ADPDiT, ADP_DIT_CONFIG
+from .modules.controlnet import ADPControlNet
 from .modules.posemb_layers import get_2d_rotary_pos_embed, get_fill_resize_and_crop
 from .modules.text_encoder import T5Embedder
 from .utils.tools import set_seeds
@@ -196,8 +196,8 @@ class End2End(object):
 
         # ========================================================================
         # Create model structure and load the checkpoint
-        logger.info(f"Building ADG-DiT model...")
-        model_config = ADG_DIT_CONFIG[self.args.model]
+        logger.info(f"Building ADP-DiT model...")
+        model_config = ADP_DIT_CONFIG[self.args.model]
         self.patch_size = model_config['patch_size']
         self.head_size = model_config['hidden_size'] // model_config['num_heads']
         self.resolutions, self.freqs_cis_img = self.standard_shapes()   # Used for TensorRT models
@@ -207,12 +207,12 @@ class End2End(object):
         self.infer_mode = self.args.infer_mode
         if self.infer_mode in ['fa', 'torch']:
             # Build model structure
-            self.model = ADGDiT(self.args,
+            self.model = ADPDiT(self.args,
                                     input_size=latent_size,
                                     **model_config,
                                     log_fn=logger.info,
                                     ).half().to(self.device)    # Force to use fp16
-            self.controlnet = ADGControlNet(self.args,
+            self.controlnet = ADPControlNet(self.args,
                                                 input_size=latent_size,
                                                 **model_config,
                                                 log_fn=logger.info,
@@ -286,7 +286,7 @@ class End2End(object):
                 else:
                     raise ValueError(f"Invalid model path: {dit_weight} with unrecognized weight format: "
                                      f"{list(map(str, files))}. When given a directory as --dit-weight, only "
-                                     f"`pytorch_model_*.pt`(provided by ADGDiT official) and "
+                                     f"`pytorch_model_*.pt`(provided by ADPDiT official) and "
                                      f"`*_model_states.pt`(saved by deepspeed) can be parsed. If you want to load a "
                                      f"specific weight file, please provide the full path to the file.")
             elif dit_weight.is_file():
@@ -344,7 +344,7 @@ class End2End(object):
                                f"are: {list(state_dict.keys())}.")
 
         if 'style_embedder.weight' in state_dict and not hasattr(self.model, 'style_embedder'):
-            raise ValueError(f"You might be attempting to load the weights of ADG-DiT version <= 1.1. You need "
+            raise ValueError(f"You might be attempting to load the weights of ADP-DiT version <= 1.1. You need "
                              f"to set `--use-style-cond --size-cond 1024 1024 --beta-end 0.03` to adapt to these weights."
                              f"Alternatively, you can use weights of version >= 1.2, which no longer depend on "
                              f"these two parameters.")
@@ -353,7 +353,7 @@ class End2End(object):
                              f"to remove `--use-style-cond` and `--size-cond 1024 1024` to adapt to these weights.")
 
         if 'style_embedder.weight' in controlnet_state_dict and not hasattr(self.controlnet, 'style_embedder'):
-            raise ValueError(f"You might be attempting to load the weights of ADG-DiT version <= 1.1. You need "
+            raise ValueError(f"You might be attempting to load the weights of ADP-DiT version <= 1.1. You need "
                              f"to set `--use-style-cond --size-cond 1024 1024 --beta-end 0.03` to adapt to these weights."
                              f"Alternatively, you can use weights of version >= 1.2, which no longer depend on "
                              f"these two parameters.")

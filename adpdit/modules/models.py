@@ -37,9 +37,9 @@ class FP32_SiLU(nn.SiLU):
         return torch.nn.functional.silu(inputs.float(), inplace=False).to(inputs.dtype)
 
 
-class ADGDiTBlock(nn.Module):
+class ADPDiTBlock(nn.Module):
     """
-    A ADGDiT block with `add` conditioning.
+    A ADPDiT block with `add` conditioning.
     """
     def __init__(self,
                  hidden_size,
@@ -135,7 +135,7 @@ class ADGDiTBlock(nn.Module):
 
 class FinalLayer(nn.Module):
     """
-    The final layer of ADGDiT.
+    The final layer of ADPDiT.
     """
     def __init__(self, final_hidden_size, c_emb_size, patch_size, out_channels):
         super().__init__()
@@ -153,9 +153,9 @@ class FinalLayer(nn.Module):
         return x
 
 
-class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
+class ADPDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
     """
-    ADGDiT: Diffusion model with a Transformer backbone.
+    ADPDiT: Diffusion model with a Transformer backbone.
 
     Inherit ModelMixin and ConfigMixin to be compatible with the sampler StableDiffusionPipeline of diffusers.
 
@@ -255,9 +255,9 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
         num_patches = self.x_embedder.num_patches
         log_fn(f"    Number of tokens: {num_patches}")
 
-        # ADG Blocks
+        # ADP Blocks
         self.blocks = nn.ModuleList([
-            ADGDiTBlock(hidden_size=hidden_size,
+            ADPDiTBlock(hidden_size=hidden_size,
                             c_emb_size=hidden_size,
                             num_heads=num_heads,
                             mlp_ratio=mlp_ratio,
@@ -384,7 +384,7 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
         # Concatenate all extra vectors
         c = t + self.extra_embedder(extra_vec)  # [B, D]
 
-        # ========================= Forward pass through ADGDiT blocks =========================
+        # ========================= Forward pass through ADPDiT blocks =========================
         skips = []
         for layer, block in enumerate(self.blocks):
             if layer > self.depth // 2:
@@ -431,7 +431,7 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
 
-        # Zero-out adaLN modulation layers in ADGDiT blocks:
+        # Zero-out adaLN modulation layers in ADPDiT blocks:
         for block in self.blocks:
             nn.init.constant_(block.default_modulation[-1].weight, 0)
             nn.init.constant_(block.default_modulation[-1].bias, 0)
@@ -535,10 +535,10 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
 
 
 #################################################################################
-#                            ADGDiT Configs                                     #
+#                            ADPDiT Configs                                     #
 #################################################################################
 
-ADG_DIT_CONFIG = {
+ADP_DIT_CONFIG = {
     'DiT-g/2': {'depth': 40, 'hidden_size': 1408, 'patch_size': 2, 'num_heads': 16, 'mlp_ratio': 4.3637},
     'DiT-XL/2': {'depth': 28, 'hidden_size': 1152, 'patch_size': 2, 'num_heads': 16},
     'DiT-256/2': {'depth': 24, 'hidden_size': 1024, 'patch_size': 2, 'num_heads': 16},
@@ -546,15 +546,15 @@ ADG_DIT_CONFIG = {
 
 
 def DiT_g_2(args, **kwargs):
-    return ADGDiT(args, depth=40, hidden_size=1408, patch_size=2, num_heads=16, mlp_ratio=4.3637, **kwargs)
+    return ADPDiT(args, depth=40, hidden_size=1408, patch_size=2, num_heads=16, mlp_ratio=4.3637, **kwargs)
 
 def DiT_XL_2(args, **kwargs):
-    return ADGDiT(args, depth=28, hidden_size=1152, patch_size=2, num_heads=16, **kwargs)
+    return ADPDiT(args, depth=28, hidden_size=1152, patch_size=2, num_heads=16, **kwargs)
 
 def DiT_256_2(args, **kwargs):
-    return ADGDiT(args, depth=24, hidden_size=1024, patch_size=2, num_heads=16, **kwargs)
+    return ADPDiT(args, depth=24, hidden_size=1024, patch_size=2, num_heads=16, **kwargs)
 
-ADG_DIT_MODELS = {
+ADP_DIT_MODELS = {
     'DiT-g/2':  DiT_g_2,
     'DiT-XL/2': DiT_XL_2,
     'DiT-256/2': DiT_256_2

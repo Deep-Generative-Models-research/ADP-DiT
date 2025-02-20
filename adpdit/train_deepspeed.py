@@ -20,18 +20,18 @@ from torch.utils.tensorboard import SummaryWriter
 
 from IndexKits.index_kits import ResolutionGroup
 from IndexKits.index_kits.sampler import DistributedSamplerWithStartIndex, BlockDistributedSampler
-from adgdit.config import get_args
-from adgdit.constants import VAE_EMA_PATH, TEXT_ENCODER, TOKENIZER, T5_ENCODER
-from adgdit.modules.text_encoder import T5Embedder
-from adgdit.data_loader.arrow_load_stream import TextImageArrowStream
-from adgdit.diffusion import create_diffusion
-from adgdit.ds_config import deepspeed_config_from_args
-from adgdit.lr_scheduler import CosineAnnealingWarmupRestarts, add_tuning_arguments
-from adgdit.modules.ema import EMA
-from adgdit.modules.fp16_layers import Float16Module
-from adgdit.modules.models import ADG_DIT_MODELS, ADGDiT
-from adgdit.modules.posemb_layers import init_image_posemb
-from adgdit.utils.tools import create_exp_folder, model_resume, get_trainable_params
+from adpdit.config import get_args
+from adpdit.constants import VAE_EMA_PATH, TEXT_ENCODER, TOKENIZER, T5_ENCODER
+from adpdit.modules.text_encoder import T5Embedder
+from adpdit.data_loader.arrow_load_stream import TextImageArrowStream
+from adpdit.diffusion import create_diffusion
+from adpdit.ds_config import deepspeed_config_from_args
+from adpdit.lr_scheduler import CosineAnnealingWarmupRestarts, add_tuning_arguments
+from adpdit.modules.ema import EMA
+from adpdit.modules.fp16_layers import Float16Module
+from adpdit.modules.models import ADP_DIT_MODELS, ADPDiT
+from adpdit.modules.posemb_layers import init_image_posemb
+from adpdit.utils.tools import create_exp_folder, model_resume, get_trainable_params
 
 
 def deepspeed_initialize(args, logger, model, opt, deepspeed_config):
@@ -227,7 +227,7 @@ def main(args):
 
     tf_logging.set_verbosity_error()
 
-    logger.info("Building ADG-DiT Model.")
+    logger.info("Building ADP-DiT Model.")
 
     image_size = args.image_size
     if len(image_size) == 1:
@@ -246,7 +246,7 @@ def main(args):
         mpu=None,
         enabled=args.zero_stage == 3
     ):
-        model = ADG_DIT_MODELS[args.model](args, input_size=latent_size, log_fn=logger.info)
+        model = ADP_DIT_MODELS[args.model](args, input_size=latent_size, log_fn=logger.info)
 
     if args.multireso:
         resolutions = ResolutionGroup(image_size[0], align=16, step=args.reso_step, target_ratios=args.target_ratios).data
@@ -511,21 +511,21 @@ def main(args):
         if args.ckpt_every_n_epoch > 0 and epoch % args.ckpt_every_n_epoch == 0:
             save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='epoch')
 
-            # best 모델 갱신
-            if avg_epoch_loss < best_loss:
-                # 기존 best 체크포인트 제거 로직 수정
-                if best_checkpoint_path is not None and os.path.exists(best_checkpoint_path):
-                    if rank == 0:
-                        logger.info(f"Removing old best checkpoint: {best_checkpoint_path}")
-                        # 디렉토리인 경우 제거
-                        if os.path.isdir(best_checkpoint_path):
-                            shutil.rmtree(best_checkpoint_path)
-                        else:
-                            os.remove(best_checkpoint_path)
+            # # best 모델 갱신
+            # if avg_epoch_loss < best_loss:
+            #     # 기존 best 체크포인트 제거 로직 수정
+            #     if best_checkpoint_path is not None and os.path.exists(best_checkpoint_path):
+            #         if rank == 0:
+            #             logger.info(f"Removing old best checkpoint: {best_checkpoint_path}")
+            #             # 디렉토리인 경우 제거
+            #             if os.path.isdir(best_checkpoint_path):
+            #                 shutil.rmtree(best_checkpoint_path)
+            #             else:
+            #                 os.remove(best_checkpoint_path)
 
-                best_loss = avg_epoch_loss
-                save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='best', is_best=True)
-                best_checkpoint_path = os.path.join(checkpoint_dir, "best.pt")
+                # best_loss = avg_epoch_loss
+                # save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='best', is_best=True)
+                # best_checkpoint_path = os.path.join(checkpoint_dir, "best.pt")
 
         epoch += 1
 

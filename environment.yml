@@ -1,4 +1,4 @@
-name: ADGDiT
+name: ADPDiT
 channels:
   - pytorch
   - nvidia

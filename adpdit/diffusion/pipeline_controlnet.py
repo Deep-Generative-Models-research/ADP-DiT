@@ -32,7 +32,7 @@ from diffusers.utils.torch_utils import randn_tensor
 from transformers import BertModel, BertTokenizer
 from transformers import CLIPImageProcessor, CLIPTextModel, CLIPTokenizer
 
-from ..modules.models import ADGDiT
+from ..modules.models import ADPDiT
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -65,7 +65,7 @@ def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
     return noise_cfg
 
 
-class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMixin, FromSingleFileMixin):
+class StableDiffusionControlNetPipeline(DiffusionPipeline, TextualInversionLoaderMixin, LoraLoaderMixin, FromSingleFileMixin):
     r"""
     Pipeline for text-to-image generation using Stable Diffusion.
 
@@ -85,8 +85,8 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
             Frozen text-encoder ([clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)).
         tokenizer (Optional[`~transformers.BertTokenizer`, `~transformers.CLIPTokenizer`]):
             A `BertTokenizer` or `CLIPTokenizer` to tokenize text.
-        unet (Optional[`HunYuanDiT`, `UNet2DConditionModel`]):
-            A `HunYuanDiT` or `UNet2DConditionModel` to denoise the encoded image latents.
+        unet (Optional[`ADPDiT`, `UNet2DConditionModel`]):
+            A `ADPDiT` or `UNet2DConditionModel` to denoise the encoded image latents.
             Notice: Here we still keep the word `unet` for compatibility with the previous version of the pipeline.
         scheduler ([`SchedulerMixin`]):
             A scheduler to be used in combination with `unet` to denoise the encoded image latents. Can be one of
@@ -107,7 +107,7 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
             vae: AutoencoderKL,
             text_encoder: Union[BertModel, CLIPTextModel],
             tokenizer: Union[BertTokenizer, CLIPTokenizer],
-            unet: Union[ADGDiT, UNet2DConditionModel],
+            unet: Union[ADPDiT, UNet2DConditionModel],
             scheduler: KarrasDiffusionSchedulers,
             safety_checker: StableDiffusionSafetyChecker,
             feature_extractor: CLIPImageProcessor,
@@ -115,6 +115,7 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
             progress_bar_config: Dict[str, Any] = None,
             embedder_t5=None,
             infer_mode='torch',
+            controlnet=None,
     ):
         super().__init__()
 
@@ -181,40 +182,11 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
             scheduler=scheduler,
             safety_checker=safety_checker,
             feature_extractor=feature_extractor,
+            controlnet=controlnet,
         )
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
         self.register_to_config(requires_safety_checker=requires_safety_checker)
-
-    def check_inputs(self, prompt, height, width, callback_steps, negative_prompt, prompt_embeds, negative_prompt_embeds):
-        # Check prompt type
-        if prompt is not None and not isinstance(prompt, (str, list)):
-            raise ValueError(f"Prompt must be a string or list, but got {type(prompt)}")
-
-        # Check height and width
-        if not isinstance(height, int) or not isinstance(width, int):
-            raise ValueError(f"Height and width must be integers, but got height={type(height)}, width={type(width)}")
-
-        # Check callback_steps
-        if callback_steps is not None and callback_steps <= 0:
-            raise ValueError(f"callback_steps must be a positive integer, but got {callback_steps}")
-
-        # Optionally, add more checks as needed
-    def prepare_extra_step_kwargs(self, generator, eta):
-        # This function prepares additional step kwargs for the diffusion scheduler.
-        # eta is only used with the 'ddim' scheduler, so we include it conditionally.
-        extra_step_kwargs = {}
-
-        # Check if the scheduler accepts generator
-        accepts_generator = "generator" in set(inspect.signature(self.scheduler.step).parameters.keys())
-        if accepts_generator:
-            extra_step_kwargs["generator"] = generator
-
-        # Add eta if using DDIM scheduler, to control the amount of noise injected.
-        if "eta" in set(inspect.signature(self.scheduler.step).parameters.keys()):
-            extra_step_kwargs["eta"] = eta
-
-        return extra_step_kwargs
 
     def enable_vae_slicing(self):
         r"""
@@ -340,7 +312,7 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
             batch_size = prompt_embeds.shape[0]
 
         if prompt_embeds is None:
-            # textual inversion: procecss multi-vector tokens if necessary
+            # textual inversion: process multi-vector tokens if necessary
             if isinstance(self, TextualInversionLoaderMixin):
                 prompt = self.maybe_convert_prompt(prompt, tokenizer)
 
@@ -411,7 +383,7 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
             else:
                 uncond_tokens = negative_prompt
 
-            # textual inversion: procecss multi-vector tokens if necessary
+            # textual inversion: process multi-vector tokens if necessary
             if isinstance(self, TextualInversionLoaderMixin):
                 uncond_tokens = self.maybe_convert_prompt(uncond_tokens, tokenizer)
 
@@ -542,7 +514,6 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
                 f" size of {batch_size}. Make sure the batch size matches the length of the generators."
             )
 
-        # Use image_latents if available
         if latents is None:
             latents = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
         else:
@@ -566,7 +537,6 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
             eta: Optional[float] = 0.0,
             generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
             latents: Optional[torch.FloatTensor] = None,
-            image_latents: Optional[torch.FloatTensor] = None,  # Add image_latents as an argument
             prompt_embeds: Optional[torch.FloatTensor] = None,
             prompt_embeds_t5: Optional[torch.FloatTensor] = None,
             negative_prompt_embeds: Optional[torch.FloatTensor] = None,
@@ -583,6 +553,8 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
             use_fp16: bool = False,
             freqs_cis_img: Optional[tuple] = None,
             learn_sigma: bool = True,
+            image=None,
+            control_weight=1.0
     ):
         r"""
         The call function to the pipeline for generation.
@@ -719,11 +691,6 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
 
         # 6. Prepare latent variables
         num_channels_latents = self.unet.config.in_channels
-
-        # If image_latents are passed, use them
-        if latents is None and image_latents is not None:
-            latents = image_latents  # Use image_latents here
-
         latents = self.prepare_latents(batch_size * num_images_per_prompt,
                                        num_channels_latents,
                                        height,
@@ -736,6 +703,9 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
 
         # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
+
+        condition = self.vae.encode(image.float()).latent_dist.sample(generator).mul_(self.vae.config.scaling_factor).half()
+        condition = torch.cat([condition] * 2) if do_classifier_free_guidance else condition
 
         # 8. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
@@ -757,6 +727,25 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
 
                 # predict the noise residual
                 if self.infer_mode in ["fa", "torch"]:
+                    controls = self.controlnet(
+                        latent_model_input,
+                        t_expand,
+                        condition,
+                        encoder_hidden_states=prompt_embeds,
+                        text_embedding_mask=attention_mask,
+                        encoder_hidden_states_t5=prompt_embeds_t5,
+                        text_embedding_mask_t5=attention_mask_t5,
+                        image_meta_size=ims,
+                        style=style,
+                        cos_cis_img=freqs_cis_img[0],
+                        sin_cis_img=freqs_cis_img[1],
+                        return_dict=False,
+                    )
+                    if isinstance(control_weight, list):
+                        assert len(control_weight) == len(controls)
+                        controls = [control * weight for control, weight in zip(controls, control_weight)]
+                    else:
+                        controls = [control * control_weight for control in controls]
                     noise_pred = self.unet(
                         latent_model_input,
                         t_expand,
@@ -769,6 +758,7 @@ class StableDiffusionPipeline(DiffusionPipeline, TextualInversionLoaderMixin, Lo
                         cos_cis_img=freqs_cis_img[0],
                         sin_cis_img=freqs_cis_img[1],
                         return_dict=False,
+                        controls=controls
                     )
                 elif self.infer_mode == "trt":
                     noise_pred = self.unet(

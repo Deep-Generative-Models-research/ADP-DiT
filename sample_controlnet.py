@@ -3,8 +3,8 @@ from pathlib import Path
 from loguru import logger
 
 from mllm.dialoggen_demo import DialogGen
-from adgdit.config import get_args
-from adgdit.inference_controlnet import End2End
+from adpdit.config import get_args
+from adpdit.inference_controlnet import End2End
 
 from torchvision import transforms as T
 import numpy as np

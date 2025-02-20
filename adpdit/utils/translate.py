@@ -3,7 +3,7 @@ from googletrans import Translator
 import time
 
 # Load the CSV file
-csv_file_path = '/home/juneyonglee/Desktop/ADGDiT/dataset/porcelain/csvfile/image_text.csv'  # Replace with your actual file path
+csv_file_path = '/home/juneyonglee/Desktop/ADPDiT/dataset/porcelain/csvfile/image_text.csv'  # Replace with your actual file path
 df = pd.read_csv(csv_file_path)
 
 # Initialize the Google Translator

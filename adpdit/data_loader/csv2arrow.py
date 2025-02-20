@@ -81,7 +81,7 @@ if __name__ == '__main__':
 
     if len(sys.argv) != 4:
         print("Usage: python hydit/data_loader/csv2arrow.py ${csv_root} ${output_arrow_data_path} ${pool_num}")
-        print("csv_root: The path to your created CSV file. For more details, see https://github.com/Deep-Generative-Models-research/ADG-DiT/tree/main")
+        print("csv_root: The path to your created CSV file. For more details, see https://github.com/Deep-Generative-Models-research/ADP-DiT/tree/main")
         print("output_arrow_data_path: The path for storing the created Arrow file")
         print("pool_num: The number of processes, used for multiprocessing. If you encounter memory issues, you can set pool_num to 1")
         sys.exit(1)

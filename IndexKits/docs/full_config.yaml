@@ -1,6 +1,6 @@
 source:
-  - /ADGDiT/dataset/task1/*.arrow
-  - /ADGDiT/dataset/task2/*.arrow:
+  - /ADPDiT/dataset/task1/*.arrow
+  - /ADPDiT/dataset/task2/*.arrow:
       repeat: 2
 
 remove_md5_dup: false

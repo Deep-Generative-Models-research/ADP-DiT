@@ -31,7 +31,7 @@ class FP32_SiLU(nn.SiLU):
         return torch.nn.functional.silu(inputs.float(), inplace=False).to(inputs.dtype)
 
 
-class ADGDiTBlock(nn.Module):
+class ADPDiTBlock(nn.Module):
     def __init__(self, hidden_size, c_emb_size, num_heads, mlp_ratio=4.0, text_states_dim=1024, use_flash_attn=False):
         super().__init__()
         self.use_flash_attn = use_flash_attn
@@ -72,7 +72,7 @@ class FinalLayer(nn.Module):
         return x
 
 
-class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
+class ADPDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
     @register_to_config
     def __init__(self, args, input_size=(32, 32), patch_size=2, in_channels=4, hidden_size=1152, depth=28, num_heads=16):
         super().__init__()
@@ -85,9 +85,9 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
             self.text_states_dim = 1024  # CLIP hidden size
             print(f"Loading pretrained CLIP model...")
             self.text_encoder = CLIPModel.from_pretrained('openai/clip-vit-base-patch32')
-        
+
         self.blocks = nn.ModuleList([
-            ADGDiTBlock(hidden_size, hidden_size, num_heads, text_states_dim=self.text_states_dim, use_flash_attn=args.use_flash_attn)
+            ADPDiTBlock(hidden_size, hidden_size, num_heads, text_states_dim=self.text_states_dim, use_flash_attn=args.use_flash_attn)
             for _ in range(depth)
         ])
         self.final_layer = FinalLayer(hidden_size, hidden_size, patch_size, in_channels)
@@ -115,21 +115,21 @@ class ADGDiT(ModelMixin, ConfigMixin, PeftAdapterMixin):
         return x
 
 
-ADG_DIT_CONFIG = {
+ADP_DIT_CONFIG = {
     'DiT-g/2': {'depth': 40, 'hidden_size': 1408, 'patch_size': 2, 'num_heads': 16, 'mlp_ratio': 4.3637},
     'DiT-XL/2': {'depth': 28, 'hidden_size': 1152, 'patch_size': 2, 'num_heads': 16},
 }
 
 
 def DiT_g_2(args, **kwargs):
-    return ADGDiT(args, depth=40, hidden_size=1408, patch_size=2, num_heads=16, mlp_ratio=4.3637, **kwargs)
+    return ADPDiT(args, depth=40, hidden_size=1408, patch_size=2, num_heads=16, mlp_ratio=4.3637, **kwargs)
 
 
 def DiT_XL_2(args, **kwargs):
-    return ADGDiT(args, depth=28, hidden_size=1152, patch_size=2, num_heads=16, **kwargs)
+    return ADPDiT(args, depth=28, hidden_size=1152, patch_size=2, num_heads=16, **kwargs)
 
 
-ADG_DIT_MODELS = {
+ADP_DIT_MODELS = {
     'DiT-g/2':  DiT_g_2,
     'DiT-XL/2': DiT_XL_2,
 }

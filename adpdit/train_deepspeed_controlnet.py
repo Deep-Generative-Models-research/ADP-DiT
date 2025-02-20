@@ -20,24 +20,24 @@ from torchvision.transforms import functional as TF
 from diffusers.models import AutoencoderKL
 from transformers import BertModel, BertTokenizer, logging as tf_logging
 
-from adgdit.config import get_args
-from adgdit.constants import VAE_EMA_PATH, TEXT_ENCODER, TOKENIZER, T5_ENCODER
-from adgdit.modules.text_encoder import T5Embedder
-from adgdit.lr_scheduler import WarmupLR
-from adgdit.data_loader.arrow_load_stream import TextImageArrowStream
-from adgdit.diffusion import create_diffusion
-from adgdit.ds_config import deepspeed_config_from_args
-from adgdit.modules.ema import EMA
-from adgdit.modules.fp16_layers import Float16Module
-from adgdit.modules.models import ADG_DIT_MODELS
-from adgdit.modules.controlnet import ADGControlNet
-from adgdit.modules.posemb_layers import init_image_posemb
-from adgdit.utils.tools import create_logger, set_seeds, create_exp_folder, model_resume, get_trainable_params
+from adpdit.config import get_args
+from adpdit.constants import VAE_EMA_PATH, TEXT_ENCODER, TOKENIZER, T5_ENCODER
+from adpdit.modules.text_encoder import T5Embedder
+from adpdit.lr_scheduler import WarmupLR
+from adpdit.data_loader.arrow_load_stream import TextImageArrowStream
+from adpdit.diffusion import create_diffusion
+from adpdit.ds_config import deepspeed_config_from_args
+from adpdit.modules.ema import EMA
+from adpdit.modules.fp16_layers import Float16Module
+from adpdit.modules.models import ADP_DIT_MODELS
+from adpdit.modules.controlnet import ADPControlNet
+from adpdit.modules.posemb_layers import init_image_posemb
+from adpdit.utils.tools import create_logger, set_seeds, create_exp_folder, model_resume, get_trainable_params
 from IndexKits.index_kits import ResolutionGroup
 from IndexKits.index_kits.sampler import DistributedSamplerWithStartIndex, BlockDistributedSampler
 from peft import LoraConfig, get_peft_model
 
-from adgdit.annotator.dwpose import DWposeDetector
+from adpdit.annotator.dwpose import DWposeDetector
 torch.optim.lr_scheduler.LRScheduler = torch.optim.lr_scheduler._LRScheduler
 from transformers import pipeline
 import cv2
@@ -277,11 +277,11 @@ def main(args):
                              config_dict_or_path=deepspeed_config,
                              mpu=None,
                              enabled=args.zero_stage == 3):
-        model = ADG_DIT_MODELS[args.model](args,
+        model = ADP_DIT_MODELS[args.model](args,
                                        input_size=latent_size,
                                        log_fn=logger.info,
                                         )
-        controlnet = ADGControlNet(args,
+        controlnet = ADPControlNet(args,
                                        input_size=latent_size,
                                        depth=40, hidden_size=1408, patch_size=2, num_heads=16, mlp_ratio=4.3637,
                                        log_fn=logger.info,

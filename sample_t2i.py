@@ -1,7 +1,7 @@
 from pathlib import Path
 from loguru import logger
-from adgdit.config import get_args
-from adgdit.inference import End2End
+from adpdit.config import get_args
+from adpdit.inference import End2End
 
 
 def inferencer():
@@ -30,7 +30,7 @@ if __name__ == "__main__":
         height=height,
         width=width,
         seed=args.seed,
-        enhanced_prompt=None,  
+        enhanced_prompt=None,
         negative_prompt=args.negative,
         infer_steps=args.infer_steps,
         guidance_scale=args.cfg_scale,

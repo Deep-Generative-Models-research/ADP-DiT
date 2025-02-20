@@ -1,11 +1,11 @@
 export CUDA_VISIBLE_DEVICES=3
-export MASTER_PORT=29503  # »ç¿ëÇÒ Æ÷Æ® ÁöÁ¤
-export PYTHONPATH=/mnt/ssd/ADG-DiT/IndexKits:$PYTHONPATH
+export MASTER_PORT=29503  # ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Æ® ï¿½ï¿½ï¿½ï¿½
+export PYTHONPATH=/mnt/ssd/ADP-DiT/IndexKits:$PYTHONPATH
 
 model='DiT-XL/2'                                                   # model type
-task_flag="lora_adgdit_ema_rank64"                             # task flag
-resume_module_root=/mnt/ssd/ADG-DiT/ADG-DiT_XL_2_ADoldversion/003-dit_XL_2/checkpoints/e4800.pt/zero_pp_rank_0_mp_rank_00_optim_states.pt   # resume checkpoint
-index_file=/mnt/ssd/ADG-DiT/dataset/AD2_meta/jsons/AD2_meta.json                # the selected data indices
+task_flag="lora_adpdit_ema_rank64"                             # task flag
+resume_module_root=/mnt/ssd/ADP-DiT/ADP-DiT_XL_2_ADoldversion/003-dit_XL_2/checkpoints/e4800.pt/zero_pp_rank_0_mp_rank_00_optim_states.pt   # resume checkpoint
+index_file=/mnt/ssd/ADP-DiT/dataset/AD2_meta/jsons/AD2_meta.json                # the selected data indices
 results_dir=./DiT-XL_2_AD2_meta_lora                                            # save root for results
 batch_size=32                                                      # training batch size
 image_size=256                                                   # training image resolution
@@ -17,7 +17,7 @@ ckpt_latest_every=2000                                            # create a ckp
 rank=64                                                           # rank of lora
 max_training_steps=14000                                          # Maximum training iteration steps
 
-PYTHONPATH=./ deepspeed adgdit/train_deepspeed.py \
+PYTHONPATH=./ deepspeed adpdit/train_deepspeed.py \
     --task-flag ${task_flag} \
     --model ${model} \
     --training-parts lora \
@@ -58,7 +58,7 @@ PYTHONPATH=./ deepspeed adgdit/train_deepspeed.py \
 #     --prompt "Alzheimer Disease,Female, 84 years old, 24 months from first visit, Z-coordinate 150" \
 #     --no-enhance --load-key ema \
 #     --image-path "/workspace/dataset/AD_150/images/002_S_1280_2014-03-14_15_13_20.0_150.png" \
-#     --lora-ckpt /workspace/log_EXP/003-lora_adgdit_ema_rank64/checkpoints/final.pt/adapter_model.safetensors
+#     --lora-ckpt /workspace/log_EXP/003-lora_adpdit_ema_rank64/checkpoints/final.pt/adapter_model.safetensors
 
 
 
@@ -66,14 +66,14 @@ PYTHONPATH=./ deepspeed adgdit/train_deepspeed.py \
 # python sample_t2i.py --infer-mode fa \
 #     --prompt "Alzheimer, Female, Maternal Normal, Paternal Normal, Sibling Dementia Patient age: 71 years. Visited the clinic 4 months ago. Memory evaluations: MMD 100%, MML 100%, MMR 100%, MMO 100%, MMW 100%. MMSE score: 23.0 (mild impairment). CDR assessments: Memory 1.0, Orientation 1.0, Judgement 0.5, Communication 0.5, Home 0.5, Care 0.0" \
 #     --no-enhance \
-#     --image-path "/mnt/ssd/ADG-DiT/dataset/AD2/images/003_S_4644_2012-04-19_17_24_30.0_160.png" \
-#     --dit-weight /mnt/ssd/ADG-DiT/ADG-DiT_XL_2_ADoldversion/003-dit_XL_2/checkpoints/e4800.pt/mp_rank_00_model_states.pt --load-key module \
-#     --lora-ckpt /mnt/ssd/ADG-DiT/DiT-XL_2_AD2_meta_lora/001-lora_adgdit_ema_rank64/checkpoints/final.pt/adapter_model.safetensors 
+#     --image-path "/mnt/ssd/ADP-DiT/dataset/AD2/images/003_S_4644_2012-04-19_17_24_30.0_160.png" \
+#     --dit-weight /mnt/ssd/ADP-DiT/ADP-DiT_XL_2_ADoldversion/003-dit_XL_2/checkpoints/e4800.pt/mp_rank_00_model_states.pt --load-key module \
+#     --lora-ckpt /mnt/ssd/ADP-DiT/DiT-XL_2_AD2_meta_lora/001-lora_adpdit_ema_rank64/checkpoints/final.pt/adapter_model.safetensors
 
 
 
 # python sample_t2i.py --infer-mode fa \
 #     --prompt "Alzheimer Disease, Female, 73 years old, 25 months from first visit" \
 #     --no-enhance \
-#     --image-path "/mnt/ssd/ADG-DiT/dataset/AD2/images/003_S_4644_2012-04-19_17_24_30.0_160.png" \
-#     --dit-weight /mnt/ssd/ADG-DiT/DiT-XL_2_AD2_meta_lora/001-lora_adgdit_ema_rank64/checkpoints/latest.pt/adapter_model.safetensors  --load-key module 
+#     --image-path "/mnt/ssd/ADP-DiT/dataset/AD2/images/003_S_4644_2012-04-19_17_24_30.0_160.png" \
+#     --dit-weight /mnt/ssd/ADP-DiT/DiT-XL_2_AD2_meta_lora/001-lora_adpdit_ema_rank64/checkpoints/latest.pt/adapter_model.safetensors  --load-key module
