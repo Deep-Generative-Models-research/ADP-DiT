@@ -3,7 +3,7 @@
 ADPDiT: A Multimodal Diffusion Transformer for Predicting Alzheimer's Disease Progression and Generating Brain Image
 
 
-## 📜 Requirements
+## Requirements
 
 This repo consists of ADP-DiT (text guided image-to-image model).
 
@@ -65,7 +65,7 @@ docker image ls
 docker run --gpus all -it --shm-size=8g -v your repository:/workspace -p 8888:8888 adp-dit:cuda12
 ```
 
-## :truck: Training
+## Training
 
 ### Data Preparation
 
