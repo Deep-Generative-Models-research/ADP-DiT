@@ -57,7 +57,7 @@ wget https://~~~~~~~/adp_dit_cu12.tar
 
 # 2. Import the docker tar file and show the image meta information
 # For CUDA 12
-docker load -i hunyuan_dit_cu12.tar
+docker load -i adp_dit_cu12.tar
 
 
 docker image ls
