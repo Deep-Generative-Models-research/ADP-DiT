@@ -19,7 +19,7 @@ The following table shows the requirements for running the models
   * **Recommended**: We recommend using a GPU with 24GB of memory for better generation quality.
 * Tested operating system: Linux
 
-## 🛠️ Dependencies and Installation
+## Dependencies and Installation
 
 Begin by cloning the repository:
 ```shell
