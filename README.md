@@ -112,15 +112,15 @@ docker run --gpus all -it --shm-size=8g -v your repository:/workspace -p 8888:88
    cd ./dataset
   
    porcelain
-      ├──images/  (image files)
-      │  ├──001_S_0001_2025-01-01_165.png
-      │  ├──001_S_0001_2025-02-01_165.png
+      ├──arrows/  (arrow files containing all necessary training data)
+      │  ├──00000.arrow
+      │  ├──00001.arrow\
       │  ├──......
       ├──csvfile/  (csv files containing text-image pairs)
       │  ├──image_text.csv
-      ├──arrows/  (arrow files containing all necessary training data)
-      │  ├──00000.arrow
-      │  ├──00001.arrow
+      ├──images/  (image files)
+      │  ├──001_S_0001_2025-01-01_165.png
+      │  ├──001_S_0001_2025-02-01_165.png
       │  ├──......
       ├──jsons/  (final training data index files which read data from arrow files during training)
       │  ├──AD3_meta.json
