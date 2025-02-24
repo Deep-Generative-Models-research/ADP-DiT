@@ -20,8 +20,8 @@ CONVERSION_FOLDER_MAP = {
     # ("Cognitive Normal", "Cognitive Normal"): "CNtoCN",
     # ("Cognitive Normal", "Mild Cognitive Impairment"): "CNtoMC",
     ("Mild Cognitive Impairment", "Mild Cognitive Impairment"): "MCtoMC",
-    ("Mild Cognitive Impairment", "Alzheimer Disease"): "MCtoAD",
-    ("Alzheimer Disease", "Alzheimer Disease"): "ADtoAD"
+    ("Mild Cognitive Impairment", "Alzheimer's Disease"): "MCtoAD",
+    ("Alzheimer's Disease", "Alzheimer's Disease"): "ADtoAD"
 }
 
 # 허용되는 변환 쌍
@@ -29,14 +29,14 @@ ALLOWED_PAIRS = {
     # ("Cognitive Normal", "Cognitive Normal"),
     # ("Cognitive Normal", "Mild Cognitive Impairment"),
     ("Mild Cognitive Impairment", "Mild Cognitive Impairment"),
-    ("Mild Cognitive Impairment", "Alzheimer Disease"),
-    ("Alzheimer Disease", "Alzheimer Disease")
+    ("Mild Cognitive Impairment", "Alzheimer's Disease"),
+    ("Alzheimer's Disease", "Alzheimer's Disease")
 }
 
 def get_condition(text):
     """텍스트에서 조건 문자열을 추출합니다."""
-    if "Alzheimer Disease" in text:
-        return "Alzheimer Disease"
+    if "Alzheimer's Disease" in text:
+        return "Alzheimer's Disease"
     elif "Mild Cognitive Impairment" in text:
         return "Mild Cognitive Impairment"
     elif "Cognitive Normal" in text:
@@ -147,7 +147,7 @@ def run_experiment(image_path, prompt, target_path, target_prompt, conversion_pa
 
     # 여러 cfg_scale 값과 infer_steps를 사용합니다.
     cfg_scales = [1, 2, 3]
-    infer_steps_list = range(90, 111, 1)
+    infer_steps_list = range(100, 101, 1)
     gpu_ids = list(range(1))  # GPU 0 사용
 
     # 각 GPU에 대해 max_workers=1인 executor 생성
@@ -226,7 +226,7 @@ def main():
     cond1_list = [
         "Cognitive Normal",
         "Mild Cognitive Impairment",
-        "Alzheimer Disease"
+        "Alzheimer's Disease"
     ]
 
     for condition in cond1_list:

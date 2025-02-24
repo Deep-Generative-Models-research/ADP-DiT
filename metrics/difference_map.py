@@ -13,6 +13,8 @@ from torchvision import models
 import torch
 from torchvision.transforms import ToTensor
 from matplotlib.colors import LinearSegmentedColormap
+import textwrap
+import numpy.ma as ma
 
 def generate_difference_map(
     input_path, output_path, target_path, difference_map_path, prompt="No Prompt"
@@ -20,14 +22,15 @@ def generate_difference_map(
     """
     input_path, output_path, target_path 이미지를 불러와서
     (1) 네 개 서브플롯(입력/타겟/출력/차이)으로 시각화하고
-    (2) 에지(Edge) 부분만 차이 맵을 계산하여 black->red로 표시한 이미지를 그림에 포함합니다.
+    (2) 에지(Edge) 부분만 차이 맵을 계산하여 sequential 컬러맵("hot")으로 표시합니다.
+    배경(0 값)은 회색(gray)으로 표시되고, color bar 범위는 0~100으로 설정됩니다.
     """
     # 1) 이미지 읽기
     input_img = imread(input_path)
     output_img = imread(output_path)
     target_img = imread(target_path)
 
-    # 채널 수 / 크기가 다를 경우 보정
+    # 채널 수 / 크기가 다를 경우 보정 (2D -> 3D)
     if input_img.ndim == 2:
         input_img = gray2rgb(input_img)
     if output_img.ndim == 2:
@@ -35,12 +38,10 @@ def generate_difference_map(
     if target_img.ndim == 2:
         target_img = gray2rgb(target_img)
 
-    # 리사이즈 (출력이미지와 타겟이미지는 원래 비교 대상으로 동일 크기를 맞추고 있음)
-    # 하지만 입력 이미지의 크기가 다를 수 있으므로, 여기서는 일단 그대로 둠.
-    # 필요하다면 같은 크기로 맞추고 싶으면 아래처럼 주석 해제:
-    #
-    # if output_img.shape != target_img.shape:
-    #     output_img = resize(output_img, (target_img.shape[0], target_img.shape[1]), anti_aliasing=True)
+    # 원본 input_img 크기
+    height, width = input_img.shape[:2]
+    # extent 설정 (좌표 범위를 동일하게 사용)
+    extent_val = [0, width, height, 0]
 
     # float32 변환
     output_img_f = output_img.astype(np.float32)
@@ -54,46 +55,62 @@ def generate_difference_map(
 
     # 3) 에지 추출(canny)
     from skimage.feature import canny
-    edges = canny(target_gray / 255.0, sigma=2.0)
+    edges = canny(target_gray / 255.0, sigma=1.0)  # sigma 작을수록 에지 민감
 
     # 에지 부분만 차이 남기기
     diff_map_edges = diff_map_gray * edges.astype(np.float32)
 
-    # 4) 검정→빨간색 컬러맵
-    cmap_red = LinearSegmentedColormap.from_list("black_red", [(0, "black"), (1, "red")])
+    # 만약 diff_map_edges 크기가 (height, width)와 다르다면 리사이즈
+    if diff_map_edges.shape != (height, width):
+        from skimage.transform import resize
+        diff_map_edges = resize(diff_map_edges, (height, width), preserve_range=True)
+
+    # 4) 컬러맵("hot") 복사 후, mask된 영역(값=0)은 회색(gray)으로 표시
+    import matplotlib.pyplot as plt
+    cmap_seq = plt.get_cmap("hot").copy()
+    cmap_seq.set_bad("gray")
 
     # 5) 시각화(1×4 subplot)
     fig, axes = plt.subplots(1, 4, figsize=(16, 4))
 
     # (1) Input Image
-    axes[0].imshow(input_img.astype(np.uint8))
-    axes[0].set_title("Input Image")
+    axes[0].imshow(input_img.astype(np.uint8), extent=extent_val)
+    axes[0].set_title("Input Image", pad=15)
     axes[0].axis("off")
 
     # (2) Target Image
-    axes[1].imshow(target_img.astype(np.uint8))
-    axes[1].set_title("Target Image")
+    axes[1].imshow(target_img.astype(np.uint8), extent=extent_val)
+    axes[1].set_title("Target Image", pad=15)
     axes[1].axis("off")
 
     # (3) Output Image
-    axes[2].imshow(output_img.astype(np.uint8))
-    axes[2].set_title("Output Image")
+    axes[2].imshow(output_img.astype(np.uint8), extent=extent_val)
+    axes[2].set_title("Output Image", pad=15)
     axes[2].axis("off")
 
-    # (4) Difference on Edges
-    diff_map_display = diff_map_edges.clip(0, 255).astype(np.uint8)
-    im = axes[3].imshow(diff_map_display, cmap=cmap_red)
-    axes[3].set_title("Diff(Edges)")
+    # (4) Difference Map
+    diff_map_display = diff_map_edges.clip(0, 255).astype(np.float32)
+    masked_diff = ma.masked_equal(diff_map_display, 0)
+
+    im = axes[3].imshow(masked_diff, cmap=cmap_seq, vmin=0, vmax=100, extent=extent_val)
+    axes[3].set_title("Difference Map", pad=15)
     axes[3].axis("off")
-    fig.colorbar(im, ax=axes[3], fraction=0.046, pad=0.04)
 
-    fig.suptitle(prompt)
-    plt.tight_layout()
+    cb = fig.colorbar(im, ax=axes[3], fraction=0.046, pad=0.04)
+    cb.set_ticks([0, 25, 50, 75, 100])
 
-    # 저장 (DPI=300으로 화질 개선)
-    plt.savefig(difference_map_path, dpi=300)
+    # prompt가 길 경우 자동 줄바꿈
+    wrapped_prompt = "\n".join(textwrap.wrap(prompt, width=200))
+    # 여백 확보 후 suptitle 설정
+    plt.tight_layout(rect=[0, 0, 1, 0.9])
+    fig.suptitle(wrapped_prompt, x=0.5, y=0.98, fontsize=14)
+
+    # 저장
+    plt.savefig(difference_map_path, dpi=600)
     plt.close(fig)
     print(f"차이 맵이 저장되었습니다: {difference_map_path}")
+
+
 
 
 def create_csv_if_not_exists(csv_path, required_columns):
@@ -163,7 +180,7 @@ def process_dataset(dataset_info, summary_results, top_percentage=5):
     """
     - input_csv: 입력(이미지 경로) CSV
     - 여기서 읽은 데이터를 바탕으로 '상위 5%' 차이 맵 생성
-    - 결과물은 /mnt/ssd/ADP-DiT/results/evaluation/{dataset}/ 아래에 저장
+    - 결과물은 /data1/ADG-DiT/results/evaluation/{dataset}/ 아래에 저장
     """
     dataset = dataset_info["dataset"]
     input_csv = dataset_info["input_csv"]  # 원본 이미지 경로가 들어있는 CSV
@@ -192,12 +209,14 @@ def process_dataset(dataset_info, summary_results, top_percentage=5):
     # (2) 상위 5% (SSIM) 계산
     top_n = max(1, int(len(df) * top_percentage / 100))
     top_df = df.nlargest(top_n, 'SSIM')
+    # top_df 내에서 최고 SSIM 값을 가진 인덱스
+    best_idx = top_df['SSIM'].idxmax()
 
     print(f"총 이미지 쌍: {len(df)}")
     print(f"상위 {top_percentage}% ({len(top_df)}) 이미지 쌍 선택")
 
     # (3) evaluation/{dataset} 폴더 생성
-    evaluation_root = "/mnt/ssd/ADP-DiT/results/evaluation"
+    evaluation_root = "/data1/ADG-DiT/results/evaluation"
     dataset_dir = os.path.join(evaluation_root, dataset)
     if not os.path.exists(dataset_dir):
         os.makedirs(dataset_dir)
@@ -218,8 +237,14 @@ def process_dataset(dataset_info, summary_results, top_percentage=5):
         target_path = row['target_path']
         prompt = row.get('prompt', 'No Prompt')
 
-        image_name = os.path.splitext(os.path.basename(output_path))[0]
-        difference_map_path = os.path.join(diff_dir, f"{image_name}.png")
+        # input 파일 이름과 target 파일 이름을 결합하여 파일 이름 생성
+        input_name = os.path.splitext(os.path.basename(input_path))[0]
+        target_name = os.path.splitext(os.path.basename(target_path))[0]
+        # 최고 성능(best) 결과인 경우 파일 이름에 "best_" 접두어 추가
+        if idx == best_idx:
+            difference_map_path = os.path.join(diff_dir, f"best_{input_name}_{target_name}.png")
+        else:
+            difference_map_path = os.path.join(diff_dir, f"{input_name}_{target_name}.png")
 
         # 입력, 출력, 타겟 이미지를 모두 넘겨서 4-subplot으로 표시
         generate_difference_map(input_path, output_path, target_path, difference_map_path, prompt=prompt)
@@ -263,25 +288,33 @@ def process_dataset(dataset_info, summary_results, top_percentage=5):
 def main():
     """
     difference_map.py 실행 시, 아래 evaluations에 정의된 CSV(입력 경로)들을 읽어
-    /mnt/ssd/ADP-DiT/results/evaluation/ 폴더 아래에 결과(차이맵, CSV 등)를 생성.
+    /data1/ADG-DiT/results/evaluation/ 폴더 아래에 결과(차이맵, CSV 등)를 생성.
     """
     evaluations = [
         {
             "dataset": "ADtoAD",
-            "input_csv": "/mnt/ssd/ADP-DiT/results/evaluation/ADtoAD/ADtoAD_best_results.csv",
+            "input_csv": "/data1/ADG-DiT/results/evaluation/ADtoAD/ADtoAD_best_results.csv",
+        },
+        {
+            "dataset": "MCtoAD",
+            "input_csv": "/data1/ADG-DiT/results/evaluation/MCtoAD/MCtoAD_best_results.csv",
         },
         {
             "dataset": "MCtoMC",
-            "input_csv": "/mnt/ssd/ADP-DiT/results/evaluation/MCtoMC/MCtoMC_best_results.csv",
+            "input_csv": "/data1/ADG-DiT/results/evaluation/MCtoMC/MCtoMC_best_results.csv",
+        },
+        {
+            "dataset": "CNtoMC",
+            "input_csv": "/data1/ADG-DiT/results/evaluation/CNtoMC/CNtoMC_best_results.csv",
         },
         {
             "dataset": "CNtoCN",
-            "input_csv": "/mnt/ssd/ADP-DiT/results/evaluation/CNtoCN/CNtoCN_best_results.csv",
+            "input_csv": "/data1/ADG-DiT/results/evaluation/CNtoCN/CNtoCN_best_results.csv",
         }
     ]
 
     # 최종 평가 요약 CSV
-    evaluation_root = "/mnt/ssd/ADP-DiT/results/evaluation"
+    evaluation_root = "/data1/ADG-DiT/results/evaluation"
     summary_csv_path = os.path.join(evaluation_root, "evaluate.csv")
 
     summary_results = []

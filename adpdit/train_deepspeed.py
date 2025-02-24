@@ -39,6 +39,7 @@ def deepspeed_initialize(args, logger, model, opt, deepspeed_config):
     logger.info(f"    Using deepspeed optimizer")
 
     def get_learning_rate_scheduler(optimizer):
+        """Use CosineAnnealingWarmupRestarts for the scheduler"""
         return CosineAnnealingWarmupRestarts(
             optimizer=optimizer,
             first_cycle_steps=args.t_max,
@@ -190,6 +191,9 @@ def main(args):
     if args.training_parts == "lora":
         args.use_ema = False
 
+    os.environ["OMP_NUM_THREADS"] = "128"
+    os.environ["MKL_NUM_THREADS"] = "128"
+    torch.set_num_threads(128)
     assert torch.cuda.is_available(), "Training currently requires at least one GPU."
 
     dist.init_process_group("nccl")
@@ -339,7 +343,7 @@ def main(args):
         sampler = DistributedSamplerWithStartIndex(dataset, num_replicas=world_size, rank=rank,
                                                    seed=args.global_seed, shuffle=False, drop_last=True)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, sampler=sampler,
-                        num_workers=args.num_workers, pin_memory=True, drop_last=True)
+                        num_workers=args.num_workers, pin_memory=True, drop_last=True,persistent_workers=True)
 
     logger.info(f"    Dataset contains {len(dataset):,} images.")
     logger.info(f"    Index file: {args.index_file}.")
@@ -451,31 +455,37 @@ def main(args):
                     ema.update(model.module.module, step=train_steps)
                 else:
                     ema.update(model.module, step=train_steps)
-
+            # ===========================================================================
+            # Log loss values:
+            # ===========================================================================
             running_loss += loss.item()
             log_steps += 1
             train_steps += 1
             epoch_loss_sum += loss.item()
             epoch_steps += 1
 
-            if rank == 0 and train_steps % args.log_every == 0:
+            if  train_steps % args.log_every == 0:
+                # Ensure synchronization across GPUs before timing/logging
                 torch.cuda.synchronize()
+                # Calculate elapsed time for steps
                 end_time = time.time()
                 steps_per_sec = log_steps / (end_time - start_time)
 
+                # Compute the average loss across all processes
                 avg_loss_tensor = torch.tensor(running_loss / log_steps, device=device)
                 dist.all_reduce(avg_loss_tensor, op=dist.ReduceOp.SUM)
                 avg_loss = avg_loss_tensor.item() / world_size
 
-                if rank == 0:
+                if rank == 0: # Only log on the main process
+                    # Retrieve current learning rate
                     current_lr = opt.param_groups[0]['lr']
                     samples_per_sec = int(steps_per_sec * batch_size * world_size)
-
+                    # Log metrics to TensorBoard
                     writer.add_scalar('Loss/train', avg_loss, train_steps)
                     writer.add_scalar('Learning Rate', current_lr, train_steps)
                     writer.add_scalar('Steps/Sec', steps_per_sec, train_steps)
                     writer.add_scalar('Samples/Sec', samples_per_sec, train_steps)
-
+                    # Log details to the console
                     logger.info(f"(step={train_steps:07d}) "
                                 f"(update_step={train_steps // args.grad_accu_steps:07d}) "
                                 f"Train Loss: {avg_loss:.4f}, "
@@ -486,7 +496,7 @@ def main(args):
                 running_loss = 0
                 log_steps = 0
                 start_time = time.time()
-
+            # Garbage collection:
             if args.gc_interval > 0 and (train_steps % args.gc_interval == 0):
                 gc.collect()
 
@@ -505,6 +515,7 @@ def main(args):
         if rank == 0:
             writer.add_scalar('Epoch/train', epoch, train_steps)
 
+        # Epoch 종료 후 평균 loss 계산
         avg_epoch_loss = epoch_loss_sum / epoch_steps if epoch_steps > 0 else float('inf')
 
         # epoch 단위 체크포인트 저장
@@ -528,7 +539,7 @@ def main(args):
                 # best_checkpoint_path = os.path.join(checkpoint_dir, "best.pt")
 
         epoch += 1
-
+    # Save the final model
     save_checkpoint(args, rank, logger, model, ema, epoch, train_steps, checkpoint_dir, by='final')
 
     if rank == 0:
@@ -538,4 +549,5 @@ def main(args):
 
 
 if __name__ == "__main__":
+    # Start
     main(get_args())

@@ -1,4 +1,4 @@
-model='DiT-g/2'
+model='DiT-XL/2'
 params=" \
             --qk-norm \
             --model ${model} \
@@ -7,4 +7,5 @@ params=" \
             "
 
 # 추가: MASTER_PORT 환경 변수 사용
+numactl --interleave=all \
 deepspeed --master_port=${MASTER_PORT} adpdit/train_deepspeed.py ${params} "$@"
