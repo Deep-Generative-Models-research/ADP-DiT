@@ -38,7 +38,7 @@ def get_args(default_args=None):
     parser.set_defaults(qk_norm=True)
     parser.add_argument("--norm", type=str, choices=["rms", "laryer"], default="layer", help="Normalization layer type")
     parser.add_argument("--text-states-dim", type=int, default=1024, help="Hidden size of CLIP text encoder.")
-    parser.add_argument("--text-len", type=int, default=77, help="Token length of CLIP text encoder output.")
+    parser.add_argument("--text-len", type=int, default=512, help="Token length of CLIP text encoder output.")
     parser.add_argument("--text-states-dim-t5", type=int, default=4096, help="Hidden size of CLIP text encoder.")
     parser.add_argument("--text-len-t5", type=int, default=256, help="Token length of T5 text encoder output.")
 
