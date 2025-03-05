@@ -19,7 +19,7 @@ from transformers import CLIPTextModel, CLIPTokenizer, BertModel, BertTokenizer,
 from torch.utils.tensorboard import SummaryWriter
 
 from IndexKits.index_kits import ResolutionGroup
-from IndexKits.index_kits.sampler import DistributedSamplerWithStartIndex, BlockDistributedSampler
+from IndexKits.index_kits.sampler import DistributedSamplerWithStartIndex, BlockDistributedSampler,DistributedRandomReplacementSampler
 from adpdit.config import get_args
 from adpdit.constants import VAE_EMA_PATH, TEXT_ENCODER, TOKENIZER, T5_ENCODER
 from adpdit.modules.text_encoder import T5Embedder
@@ -340,8 +340,9 @@ def main(args):
         sampler = BlockDistributedSampler(dataset, num_replicas=world_size, rank=rank, seed=args.global_seed,
                                           shuffle=False, drop_last=True, batch_size=batch_size)
     else:
-        sampler = DistributedSamplerWithStartIndex(dataset, num_replicas=world_size, rank=rank,
-                                                   seed=args.global_seed, shuffle=False, drop_last=True)
+        # sampler = DistributedSamplerWithStartIndex(dataset, num_replicas=world_size, rank=rank,
+        #                                            seed=args.global_seed, shuffle=False, drop_last=True)
+        sampler = DistributedRandomReplacementSampler(dataset, num_replicas=world_size, rank=rank, num_samples_per_replica=5000,seed=args.global_seed)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, sampler=sampler,
                         num_workers=args.num_workers, pin_memory=True, drop_last=True,persistent_workers=True)
 
