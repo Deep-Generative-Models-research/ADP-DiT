@@ -1,4 +1,4 @@
-model='DiT-XL/2'
+model='DiT-g/2'
 params=" \
             --qk-norm \
             --model ${model} \
