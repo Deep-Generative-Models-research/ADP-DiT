@@ -11,13 +11,13 @@ with open("index_kits/__init__.py", "r") as file:
 
 
 setup(
-    name='index_kits',
+    name="index_kits",
     version=version,
-    author='juneyonglee',
-    author_email='diziyong@hufs.ac.kr',
-    description='An index kits for streaming reading arrow data.',
-    packages=['index_kits', 'index_kits/dataset'],
-    scripts=['bin/idk'],
+    author="jarvizhang",
+    author_email="jarvizhang@tencent.com",
+    description="An index kits for streaming reading arrow data.",
+    packages=["index_kits", "index_kits/dataset"],
+    scripts=["bin/idk"],
     install_requires=[
         "pillow>=9.3.0",
         "tqdm>=4.60.0",
