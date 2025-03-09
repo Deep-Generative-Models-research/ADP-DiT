@@ -1,0 +1,35 @@
+<system version="1">
+  <cpu host_hash="0x2dcbfa206b01ff47" numaid="0" affinity="0000ffff,0000ffff" arch="x86_64" vendor="AuthenticAMD" familyid="175" modelid="1">
+    <pci busid="0000:01:00.0" class="0x030000" vendor="0x10de" device="0x27b2" subsystem_vendor="0x10de" subsystem_device="0x181b" link_speed="16.0 GT/s PCIe" link_width="16">
+      <gpu dev="0" sm="89" rank="0" gdr="1"/>
+    </pci>
+    <pci busid="0000:25:00.0" class="0x030000" vendor="0x10de" device="0x27b2" subsystem_vendor="0x10de" subsystem_device="0x181b" link_speed="16.0 GT/s PCIe" link_width="16">
+      <gpu dev="1" sm="89" rank="1" gdr="1"/>
+    </pci>
+    <pci busid="0000:41:00.0" class="0x030000" vendor="0x10de" device="0x27b2" subsystem_vendor="0x10de" subsystem_device="0x181b" link_speed="16.0 GT/s PCIe" link_width="16">
+      <gpu dev="2" sm="89" rank="2" gdr="1"/>
+    </pci>
+    <pci busid="0000:61:00.0" class="0x030000" vendor="0x10de" device="0x27b2" subsystem_vendor="0x10de" subsystem_device="0x181b" link_speed="16.0 GT/s PCIe" link_width="16">
+      <gpu dev="3" sm="89" rank="3" gdr="1"/>
+    </pci>
+  </cpu>
+  <cpu host_hash="0x2dcbfa206b01ff47" numaid="1" affinity="ffff0000,ffff0000" arch="x86_64" vendor="AuthenticAMD" familyid="175" modelid="1">
+    <pci busid="0000:81:00.0" class="0x030000" vendor="0x10de" device="0x27b2" subsystem_vendor="0x10de" subsystem_device="0x181b" link_speed="16.0 GT/s PCIe" link_width="16">
+      <gpu dev="4" sm="89" rank="4" gdr="1"/>
+    </pci>
+    <pci busid="0000:a1:00.0" class="0x030000" vendor="0x10de" device="0x27b2" subsystem_vendor="0x10de" subsystem_device="0x181b" link_speed="16.0 GT/s PCIe" link_width="16">
+      <gpu dev="5" sm="89" rank="5" gdr="1"/>
+    </pci>
+    <pci busid="0000:c1:00.0" class="0x030000" vendor="0x10de" device="0x27b2" subsystem_vendor="0x10de" subsystem_device="0x181b" link_speed="16.0 GT/s PCIe" link_width="16">
+      <gpu dev="6" sm="89" rank="6" gdr="1"/>
+    </pci>
+    <pci busid="0000:c2:00.0" class="0x020000" vendor="0x8086" device="0x1563" subsystem_vendor="0x8086" subsystem_device="0x0001" link_speed="8.0 GT/s PCIe" link_width="4">
+      <nic>
+        <net name="ens8f0" dev="0" speed="10000" port="0" latency="0.000000" guid="0x0" maxconn="65536" gdr="0"/>
+      </nic>
+    </pci>
+    <pci busid="0000:e1:00.0" class="0x030000" vendor="0x10de" device="0x27b2" subsystem_vendor="0x10de" subsystem_device="0x181b" link_speed="16.0 GT/s PCIe" link_width="16">
+      <gpu dev="7" sm="89" rank="7" gdr="1"/>
+    </pci>
+  </cpu>
+</system>

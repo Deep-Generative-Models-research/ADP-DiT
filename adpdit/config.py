@@ -215,7 +215,7 @@ def get_args(default_args=None):
                                                                       "flash attention is used to accelerate training.")
     parser.add_argument("--no-flash-attn", dest="use_flash_attn", action="store_false",
                         help="During training, flash attention is not used to accelerate training.")
-    parser.add_argument("--use-zero-stage", type=int, default=1, help="Use AngelPTM zero stage. Support 2 and 3")
+    parser.add_argument("--use-zero-stage", type=int, default=2, help="Use AngelPTM zero stage. Support 2 and 3")
     parser.add_argument("--grad-accu-steps", type=int, default=1, help="Gradient accumulation steps.")
     parser.add_argument("--gradient-checkpointing", action="store_true", help="Use gradient checkpointing.")
     parser.add_argument("--cpu-offloading", action="store_true", help="Use cpu offloading for parameters and optimizer states.")
