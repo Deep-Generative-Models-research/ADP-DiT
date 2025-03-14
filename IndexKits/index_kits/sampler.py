@@ -166,9 +166,7 @@ class DistributedSamplerWithStartIndex(DistributedSampler):
 
         return iter(indices)
 
-import random
-import torch.distributed as dist
-from torch.utils.data.distributed import DistributedSampler
+
 
 class DistributedRandomReplacementSampler(DistributedSampler):
     """
